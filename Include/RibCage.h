@@ -34,13 +34,12 @@ namespace AltheaEngine {
 class Application;
 } // namespace AltheaEngine
 
-namespace AltheaDemo {
-namespace BindlessDemo {
+namespace RibCage {
 
-class BindlessDemo : public IGameInstance {
+class RibCage : public IGameInstance {
 public:
-  BindlessDemo();
-  // virtual ~BindlessDemo();
+  RibCage();
+  // virtual ~RibCage();
 
   void initGame(Application& app) override;
   void shutdownGame(Application& app) override;
@@ -82,5 +81,4 @@ private:
   ScreenSpaceReflection _SSR;
   float _exposure = 0.3f;
 };
-} // namespace BindlessDemo
-} // namespace AltheaDemo
+} // namespace RibCage

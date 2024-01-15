@@ -1,14 +1,13 @@
-#include "BindlessDemo.h"
+#include "RibCage.h"
 #include <Althea/Application.h>
 
 #include <iostream>
 
 using namespace AltheaEngine;
-using namespace AltheaDemo;
 
 int main() {
   Application app("../..", "../../Extern/Althea");
-  app.createGame<BindlessDemo::BindlessDemo>();
+  app.createGame<RibCage::RibCage>();
 
   try {
     app.run();

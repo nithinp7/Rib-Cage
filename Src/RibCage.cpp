@@ -1,4 +1,4 @@
-#include "BindlessDemo.h"
+#include "RibCage.h"
 
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
@@ -26,8 +26,7 @@
 
 using namespace AltheaEngine;
 
-namespace AltheaDemo {
-namespace BindlessDemo {
+namespace RibCage {
 namespace {
 struct ForwardPassPushConstants {
   glm::mat4 model;
@@ -44,9 +43,9 @@ struct DeferredPassPushConstants {
 };
 } // namespace
 
-BindlessDemo::BindlessDemo() {}
+RibCage::RibCage() {}
 
-void BindlessDemo::initGame(Application& app) {
+void RibCage::initGame(Application& app) {
   const VkExtent2D& windowDims = app.getSwapChainExtent();
   this->_pCameraController = std::make_unique<CameraController>(
       app.getInputManager(),
@@ -118,11 +117,11 @@ void BindlessDemo::initGame(Application& app) {
       });
 }
 
-void BindlessDemo::shutdownGame(Application& app) {
+void RibCage::shutdownGame(Application& app) {
   this->_pCameraController.reset();
 }
 
-void BindlessDemo::createRenderState(Application& app) {
+void RibCage::createRenderState(Application& app) {
   const VkExtent2D& extent = app.getSwapChainExtent();
   this->_pCameraController->getCamera().setAspectRatio(
       (float)extent.width / (float)extent.height);
@@ -135,7 +134,7 @@ void BindlessDemo::createRenderState(Application& app) {
   this->_createDeferredPass(app);
 }
 
-void BindlessDemo::destroyRenderState(Application& app) {
+void RibCage::destroyRenderState(Application& app) {
   Primitive::resetPrimitiveIndexCount();
 
   Gui::destroyRenderState(app);
@@ -158,7 +157,7 @@ void BindlessDemo::destroyRenderState(Application& app) {
   this->_globalHeap = {};
 }
 
-void BindlessDemo::tick(Application& app, const FrameContext& frame) {
+void RibCage::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -215,7 +214,7 @@ void BindlessDemo::tick(Application& app, const FrameContext& frame) {
   this->_pointLights.updateResource(frame);
 }
 
-void BindlessDemo::_createModels(
+void RibCage::_createModels(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
 
@@ -252,7 +251,7 @@ void BindlessDemo::_createModels(
       glm::vec3(10.0f, -1.0f, 0.0f)));
 }
 
-void BindlessDemo::_createGlobalResources(
+void RibCage::_createGlobalResources(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
   this->_globalHeap = GlobalHeap(app);
@@ -331,7 +330,7 @@ void BindlessDemo::_createGlobalResources(
   this->_SSR.getReflectionBuffer().registerToHeap(this->_globalHeap);
 }
 
-void BindlessDemo::_createForwardPass(Application& app) {
+void RibCage::_createForwardPass(Application& app) {
   std::vector<SubpassBuilder> subpassBuilders;
 
   //  FORWARD GLTF PASS
@@ -384,7 +383,7 @@ void BindlessDemo::_createForwardPass(Application& app) {
       gBuffer.getAttachmentViews());
 }
 
-void BindlessDemo::_createDeferredPass(Application& app) {
+void RibCage::_createDeferredPass(Application& app) {
   VkClearValue colorClear;
   colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
   VkClearValue depthClear;
@@ -466,7 +465,7 @@ struct DrawableEnvMap {
 };
 } // namespace
 
-void BindlessDemo::draw(
+void RibCage::draw(
     Application& app,
     VkCommandBuffer commandBuffer,
     const FrameContext& frame) {
@@ -564,5 +563,4 @@ void BindlessDemo::draw(
 
   Gui::draw(app, frame, commandBuffer);
 }
-} // namespace BindlessDemo
-} // namespace AltheaDemo
+} // namespace RibCage
