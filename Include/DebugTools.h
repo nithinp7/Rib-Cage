@@ -3,8 +3,10 @@
 #include <Althea/Application.h>
 #include <Althea/DynamicVertexBuffer.h>
 #include <Althea/IndexBuffer.h>
-#include <Althea/RenderPass.h>
+#include <Althea/GraphicsPipeline.h>
 #include <Althea/VertexBuffer.h>
+#include <Althea/BindlessHandle.h>
+#include <Althea/DrawContext.h>
 
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
@@ -28,7 +30,7 @@ struct SelectableVertex {
 class SelectableScene {
 public:
   static void
-  buildSubpass(SubpassBuilder& builder, VkDescriptorSetLayout heapLayout);
+  buildPipeline(GraphicsPipelineBuilder& builder, VkDescriptorSetLayout heapLayout);
 
   SelectableScene() = default;
   SelectableScene(Application& app, VkCommandBuffer commandBuffer);
@@ -55,7 +57,7 @@ public:
       const glm::vec3& cursorDir,
       bool mouseButton);
 
-  void drawSubpass(const DrawContext& context, uint32_t globalUniformsHandle);
+  void drawSubpass(const DrawContext& context, UniformHandle globalUniformsHandle);
 
 private:
   SelectableVertex m_selectableVertices[MAX_SELECTABLE_VERTS_COUNT];

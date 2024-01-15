@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DebugTools.h"
+
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
 #include <Althea/ComputePipeline.h>
@@ -80,5 +82,7 @@ private:
 
   ScreenSpaceReflection _SSR;
   float _exposure = 0.3f;
+
+  SelectableScene _debugScene;
 };
 } // namespace RibCage

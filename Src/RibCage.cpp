@@ -155,6 +155,8 @@ void RibCage::destroyRenderState(Application& app) {
 
   this->_globalResources = {};
   this->_globalHeap = {};
+
+  this->_debugScene = {};
 }
 
 void RibCage::tick(Application& app, const FrameContext& frame) {
@@ -328,6 +330,8 @@ void RibCage::_createGlobalResources(
       commandBuffer,
       this->_globalHeap.getDescriptorSetLayout());
   this->_SSR.getReflectionBuffer().registerToHeap(this->_globalHeap);
+
+  this->_debugScene = SelectableScene(app, commandBuffer);
 }
 
 void RibCage::_createForwardPass(Application& app) {
@@ -365,6 +369,22 @@ void RibCage::_createForwardPass(Application& app) {
         // Global resources (view, projection, environment map)
         .addDescriptorSet(this->_globalHeap.getDescriptorSetLayout())
         .addPushConstants<ForwardPassPushConstants>(VK_SHADER_STAGE_ALL);
+  }
+
+  {
+    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
+
+    // The GBuffer contains the following color attachments
+    // 1. Position
+    // 2. Normal
+    // 3. Albedo
+    // 4. Metallic-Roughness-Occlusion
+    subpassBuilder.colorAttachments = {0, 1, 2, 3};
+    subpassBuilder.depthAttachment = 4;
+
+    SelectableScene::buildPipeline(
+        subpassBuilder.pipelineBuilder,
+        this->_globalHeap.getDescriptorSetLayout());
   }
 
   const GBufferResources& gBuffer = this->_globalResources.getGBuffer();
@@ -515,6 +535,12 @@ void RibCage::draw(
             primitive.getIndexBuffer());
       }
     }
+
+    pass.nextSubpass();
+
+    this->_debugScene.drawSubpass(
+        pass.getDrawContext(),
+        this->_globalUniforms.getCurrentBindlessHandle(frame));
   }
 
   this->_globalResources.getGBuffer().transitionToTextures(commandBuffer);

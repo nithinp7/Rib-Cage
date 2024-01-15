@@ -16,7 +16,7 @@ layout(push_constant) uniform PushConstants {
   int selectedIdx;
 } pushConstants;
 
-#include globals RESOURCE(globalUniforms, pushConstants.globalUniformsHandle)
+#define globals RESOURCE(globalUniforms, pushConstants.globalUniformsHandle)
 
 void main() {
   outNormal = normalize(localVertPos);
@@ -24,8 +24,8 @@ void main() {
   gl_Position = globals.projection * globals.view * vec4(outPosition, 1.0);
 
   if (pushConstants.selectedIdx == gl_InstanceIndex) {
-    outColor = vec4(10.0, 10.0, 0.0, 1.0);
+    outColor = vec4(1.0, 1.0, 0.0, 1.0);
   } else {
-    outColor = vec4(10.0, 0.0, 0.0, 1.0);
+    outColor = vec4(1.0, 0.0, 0.0, 1.0);
   }
 }
