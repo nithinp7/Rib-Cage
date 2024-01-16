@@ -179,21 +179,21 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   m_globalUniforms.getCurrentUniformBuffer(frame).updateUniforms(
       globalUniforms);
 
-  for (uint32_t i = 0; i < m_pointLights.getCount(); ++i) {
-    PointLight light = m_pointLights.getLight(i);
+  // for (uint32_t i = 0; i < m_pointLights.getCount(); ++i) {
+  //   PointLight light = m_pointLights.getLight(i);
 
-    light.position = 40.0f * glm::vec3(
-                                 static_cast<float>(i / 3),
-                                 -0.1f,
-                                 (static_cast<float>(i % 3) - 1.5f) * 0.5f);
+  //   light.position = 40.0f * glm::vec3(
+  //                                static_cast<float>(i / 3),
+  //                                -0.1f,
+  //                                (static_cast<float>(i % 3) - 1.5f) * 0.5f);
 
-    light.position.x += 5.5f * cos(1.5f * frame.currentTime + i);
-    light.position.z += 5.5f * sin(1.5 * frame.currentTime + i);
+  //   light.position.x += 5.5f * cos(1.5f * frame.currentTime + i);
+  //   light.position.z += 5.5f * sin(1.5 * frame.currentTime + i);
 
-    m_pointLights.setLight(i, light);
-  }
+  //   m_pointLights.setLight(i, light);
+  // }
 
-  m_pointLights.updateResource(frame);
+  // m_pointLights.updateResource(frame);
 
   glm::vec2 mouseNdc = 2.0f * globalUniforms.mouseUV - glm::vec2(1.0f);
   glm::vec4 scrPosWorld = globalUniforms.inverseView *
@@ -226,13 +226,13 @@ void RibCage::_createModels(
       glm::translate(glm::mat4(1.0f), glm::vec3(50.0f, -1.0f, 0.0f)),
       glm::vec3(8.0f)));
 
-  m_models.emplace_back(
-      app,
-      commandBuffer,
-      GEngineDirectory + "/Content/Models/MetalRoughSpheres.glb");
-  m_models.back().setModelTransform(glm::scale(
-      glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)),
-      glm::vec3(4.0f)));
+  // m_models.emplace_back(
+  //     app,
+  //     commandBuffer,
+  //     GEngineDirectory + "/Content/Models/MetalRoughSpheres.glb");
+  // m_models.back().setModelTransform(glm::scale(
+  //     glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)),
+  //     glm::vec3(4.0f)));
 
   // m_models.emplace_back(
   //     app,
@@ -296,7 +296,7 @@ void RibCage::_createGlobalResources(
 
         light.position = 40.0f * glm::vec3(
                                      static_cast<float>(i),
-                                     -0.1f,
+                                     0.5f,
                                      (static_cast<float>(j) - 1.5f) * 0.5f);
         light.emission =
             1000.0f * // / static_cast<float>(i + 1) *

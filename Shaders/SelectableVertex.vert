@@ -25,7 +25,8 @@ void main() {
   outPosition = spherePos + pushConstants.selectionRadius * localVertPos;
   gl_Position = globals.projection * globals.view * vec4(outPosition, 1.0);
 
-  if (bool(infoMask & INFO_BIT_SELECTED)) {
+  if (bool(infoMask & INFO_BIT_SELECTED)) 
+  {
     // Selected nodes yellow
     outColor = vec4(1.0, 1.0, 0.0, 1.0);
   } else {

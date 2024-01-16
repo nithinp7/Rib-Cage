@@ -37,7 +37,7 @@ void SkeletonEditor::update(
     uint32_t prevInputMask,
     uint32_t inputMask) {
   bool bLastPressed = prevInputMask & INPUT_BIT_LEFT_MOUSE;
-  bool bPressed = inputMask & INPUT_BIT_RIGHT_MOUSE;
+  bool bPressed = inputMask & INPUT_BIT_LEFT_MOUSE;
 
   bool bNewPress = !bLastPressed && bPressed;
   bool bRelease = bLastPressed && !bPressed;

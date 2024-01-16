@@ -4,7 +4,7 @@
 
 #include <limits>
 
-#define SELECTION_RADIUS 0.1f
+#define SELECTION_RADIUS 0.5f
 namespace {
 struct PushConstants {
   uint32_t globalUniformsHandle;
@@ -20,7 +20,7 @@ void SelectableScene::buildPipeline(
       // instance data
       .addVertexInputBinding<SelectableVertex>(VK_VERTEX_INPUT_RATE_INSTANCE)
       .addVertexAttribute(VertexAttributeType::VEC3, 0)
-      .addVertexAttribute(VertexAttributeType::UINT, 1)
+      .addVertexAttribute(VertexAttributeType::UINT, offsetof(SelectableVertex, infoMask))
       // vertex data
       .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
       .addVertexAttribute(VertexAttributeType::VEC3, 0) // vert pos
@@ -70,6 +70,13 @@ bool SelectableScene::trySelect(
 }
 
 void SelectableScene::update(const FrameContext& frame) {
+  // Update selected bit
+  for (int i = 0; i < m_currentVertCount; ++i)
+    m_selectableVertices[i].infoMask &= ~SelectionInfoMaskBits::SELECTED;
+  for (int selected : m_selection)
+    m_selectableVertices[selected].infoMask |= SelectionInfoMaskBits::SELECTED;
+  
+
   m_selectableVB.updateVertices(
       frame.frameRingBufferIndex,
       gsl::span(m_selectableVertices, MAX_SELECTABLE_VERTS_COUNT));
