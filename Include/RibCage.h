@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Skeleton.h"
 #include "DebugTools.h"
 
 #include <Althea/Allocator.h>
@@ -56,33 +57,36 @@ public:
       const FrameContext& frame) override;
 
 private:
-  bool _adjustingExposure = false;
+  bool m_adjustingExposure = false;
 
-  std::unique_ptr<CameraController> _pCameraController;
+  std::unique_ptr<CameraController> m_pCameraController;
 
   void _createGlobalResources(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer);
-  GlobalHeap _globalHeap;
-  GlobalUniformsResource _globalUniforms;
-  GlobalResources _globalResources;
-  PointLightCollection _pointLights;
+  GlobalHeap m_globalHeap;
+  GlobalUniformsResource m_globalUniforms;
+  GlobalResources m_globalResources;
+  PointLightCollection m_pointLights;
 
   void _createModels(Application& app, SingleTimeCommandBuffer& commandBuffer);
-  std::vector<Model> _models;
+  std::vector<Model> m_models;
 
   void _createForwardPass(Application& app);
-  StructuredBuffer<PrimitiveConstants> _primitiveConstantsBuffer; 
-  std::unique_ptr<RenderPass> _pForwardPass;
-  FrameBuffer _forwardFrameBuffer;
+  StructuredBuffer<PrimitiveConstants> m_primitiveConstantsBuffer; 
+  RenderPass m_forwardPass;
+  FrameBuffer m_forwardFrameBuffer;
 
   void _createDeferredPass(Application& app);
-  std::unique_ptr<RenderPass> _pDeferredPass;
-  SwapChainFrameBufferCollection _swapChainFrameBuffers;
+  RenderPass m_deferredPass;
+  SwapChainFrameBufferCollection m_swapChainFrameBuffers;
 
-  ScreenSpaceReflection _SSR;
-  float _exposure = 0.3f;
+  ScreenSpaceReflection m_SSR;
+  float m_exposure = 0.3f;
 
-  SelectableScene _debugScene;
+  SkeletonEditor m_skeletonEditor;
+  SelectableScene m_debugScene;
+
+  uint32_t m_inputMask = 0;
 };
 } // namespace RibCage

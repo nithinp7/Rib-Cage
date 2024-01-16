@@ -4,10 +4,11 @@
 
 #include <limits>
 
+#define SELECTION_RADIUS 0.1f
 namespace {
 struct PushConstants {
   uint32_t globalUniformsHandle;
-  int selectedIdx;
+  float selectionRadius;
 };
 } // namespace
 namespace RibCage {
@@ -19,9 +20,7 @@ void SelectableScene::buildPipeline(
       // instance data
       .addVertexInputBinding<SelectableVertex>(VK_VERTEX_INPUT_RATE_INSTANCE)
       .addVertexAttribute(VertexAttributeType::VEC3, 0)
-      .addVertexAttribute(
-          VertexAttributeType::FLOAT,
-          offsetof(SelectableVertex, selectRadius))
+      .addVertexAttribute(VertexAttributeType::UINT, 1)
       // vertex data
       .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
       .addVertexAttribute(VertexAttributeType::VEC3, 0) // vert pos
@@ -42,25 +41,38 @@ SelectableScene::SelectableScene(
   ShapeUtilities::createSphere(app, commandBuffer, m_sphereVB, m_sphereIB, 8);
 }
 
-void SelectableScene::update(
+bool SelectableScene::trySelect(
     const glm::vec3& cameraPos,
     const glm::vec3& cursorDir,
-    bool mouseButton) {
+    bool bAddToSelection) {
 
-  if (m_currentSelectedVertex == -1) {
-    if (mouseButton) {
-      float minT = std::numeric_limits<float>::max();
-      for (int i = 0; i < m_currentVertCount; ++i) {
-        SelectableVertex& vertex = m_selectableVertices[i];
-        float t;
-        if (vertex.intersect(cameraPos, cursorDir, t) && t < minT) {
-          m_currentSelectedVertex = i;
-          minT = t;
-        }
-      }
+  int selectedIndex = -1;
+  float minT = std::numeric_limits<float>::max();
+  for (int i = 0; i < m_currentVertCount; ++i) {
+    SelectableVertex& vertex = m_selectableVertices[i];
+    float t;
+    if (vertex.intersect(cameraPos, cursorDir, t) && t < minT) {
+      selectedIndex = i;
+      minT = t;
     }
-  } else {
   }
+
+  if (selectedIndex != -1) {
+    if (bAddToSelection)
+      addToSelection(selectedIndex);
+    else
+      selectVertex(selectedIndex);
+
+    return true;
+  }
+
+  return false;
+}
+
+void SelectableScene::update(const FrameContext& frame) {
+  m_selectableVB.updateVertices(
+      frame.frameRingBufferIndex,
+      gsl::span(m_selectableVertices, MAX_SELECTABLE_VERTS_COUNT));
 }
 
 void SelectableScene::drawSubpass(
@@ -68,7 +80,7 @@ void SelectableScene::drawSubpass(
     UniformHandle globalUniformsHandle) {
   PushConstants constants{};
   constants.globalUniformsHandle = globalUniformsHandle.index;
-  constants.selectedIdx = m_currentSelectedVertex;
+  constants.selectionRadius = SELECTION_RADIUS;
   context.updatePushConstants(constants, 0);
   context.bindDescriptorSets();
   context.bindIndexBuffer(m_sphereIB);
@@ -97,7 +109,7 @@ bool SelectableVertex::intersect(
   float distSq = glm::dot(diff, diff);
 
   float b = 2.0 * glm::dot(diff, dir);
-  float c = glm::dot(diff, diff) - selectRadius * selectRadius;
+  float c = glm::dot(diff, diff) - SELECTION_RADIUS * SELECTION_RADIUS;
 
   float b2_4ac = b * b - 4.0 * c;
   if (b2_4ac < 0.0) {

@@ -1,8 +1,12 @@
-#pragma once 
+#pragma once
+
+#include "DebugTools.h"
 
 #include <glm/glm.hpp>
+
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace RibCage {
 
@@ -11,12 +15,13 @@ namespace RibCage {
 
 struct Bone {
   glm::mat4 transform;
-  int childrenStartIdx;
-  int childrenCount;
+  int childrenStartIdx = -1;
+  int childrenCount = 0;
 };
 
-struct Skeleton {  
+struct Skeleton {
   Bone bones[MAX_BONE_COUNT];
+  int boneCount = 0;
 };
 
 class SkeletonLoader {
@@ -25,5 +30,24 @@ public:
   static bool save(const std::string& path, const Skeleton& skeleton);
 
 private:
+};
+
+class SkeletonEditor {
+public:
+  SkeletonEditor() = default;
+
+  void update(
+      SelectableScene& scene,
+      const glm::vec3& cameraPos,
+      const glm::vec3& cursorDir,
+      uint32_t prevInputMask,
+      uint32_t inputMask);
+
+private:
+  Skeleton m_skeleton{};
+
+  // Constraints for spawning new vertices
+  glm::vec3 m_constraintPlane;
+  glm::vec3 m_constraintPoint;
 };
 } // namespace RibCage

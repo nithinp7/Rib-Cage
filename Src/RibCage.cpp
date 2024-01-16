@@ -47,24 +47,24 @@ RibCage::RibCage() {}
 
 void RibCage::initGame(Application& app) {
   const VkExtent2D& windowDims = app.getSwapChainExtent();
-  this->_pCameraController = std::make_unique<CameraController>(
+  m_pCameraController = std::make_unique<CameraController>(
       app.getInputManager(),
       90.0f,
       (float)windowDims.width / (float)windowDims.height);
-  this->_pCameraController->setMaxSpeed(15.0f);
+  m_pCameraController->setMaxSpeed(15.0f);
 
   // TODO: need to unbind these at shutdown
   InputManager& input = app.getInputManager();
   input.addKeyBinding(
       {GLFW_KEY_L, GLFW_PRESS, 0},
-      [&adjustingExposure = this->_adjustingExposure, &input]() {
+      [&adjustingExposure = m_adjustingExposure, &input]() {
         adjustingExposure = true;
         input.setMouseCursorHidden(false);
       });
 
   input.addKeyBinding(
       {GLFW_KEY_L, GLFW_RELEASE, 0},
-      [&adjustingExposure = this->_adjustingExposure, &input]() {
+      [&adjustingExposure = m_adjustingExposure, &input]() {
         adjustingExposure = false;
         input.setMouseCursorHidden(true);
       });
@@ -73,65 +73,33 @@ void RibCage::initGame(Application& app) {
   input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
       [&app, that = this]() {
-        for (Subpass& subpass :
-             that->_pointLights.getShadowMapPass().getSubpasses()) {
-          GraphicsPipeline& pipeline = subpass.getPipeline();
-          if (pipeline.recompileStaleShaders()) {
-            if (pipeline.hasShaderRecompileErrors()) {
-              std::cout << pipeline.getShaderRecompileErrors() << "\n";
-            } else {
-              pipeline.recreatePipeline(app);
-            }
-          }
-        }
-
-        for (Subpass& subpass : that->_pForwardPass->getSubpasses()) {
-          GraphicsPipeline& pipeline = subpass.getPipeline();
-          if (pipeline.recompileStaleShaders()) {
-            if (pipeline.hasShaderRecompileErrors()) {
-              std::cout << pipeline.getShaderRecompileErrors() << "\n";
-            } else {
-              pipeline.recreatePipeline(app);
-            }
-          }
-        }
-
-        for (Subpass& subpass : that->_pDeferredPass->getSubpasses()) {
-          GraphicsPipeline& pipeline = subpass.getPipeline();
-          if (pipeline.recompileStaleShaders()) {
-            if (pipeline.hasShaderRecompileErrors()) {
-              std::cout << pipeline.getShaderRecompileErrors() << "\n";
-            } else {
-              pipeline.recreatePipeline(app);
-            }
-          }
-        }
+        that->m_pointLights.getShadowMapPass().tryRecompile(app);
+        that->m_forwardPass.tryRecompile(app);
+        that->m_deferredPass.tryRecompile(app);
       });
 
   input.addMousePositionCallback(
-      [&adjustingExposure = this->_adjustingExposure,
-       &exposure = this->_exposure](double x, double y, bool cursorHidden) {
+      [&adjustingExposure = m_adjustingExposure,
+       &exposure = m_exposure](double x, double y, bool cursorHidden) {
         if (adjustingExposure) {
           exposure = static_cast<float>(y);
         }
       });
 }
 
-void RibCage::shutdownGame(Application& app) {
-  this->_pCameraController.reset();
-}
+void RibCage::shutdownGame(Application& app) { m_pCameraController.reset(); }
 
 void RibCage::createRenderState(Application& app) {
   const VkExtent2D& extent = app.getSwapChainExtent();
-  this->_pCameraController->getCamera().setAspectRatio(
+  m_pCameraController->getCamera().setAspectRatio(
       (float)extent.width / (float)extent.height);
 
   Gui::createRenderState(app);
 
   SingleTimeCommandBuffer commandBuffer(app);
-  this->_createGlobalResources(app, commandBuffer);
-  this->_createForwardPass(app);
-  this->_createDeferredPass(app);
+  _createGlobalResources(app, commandBuffer);
+  _createForwardPass(app);
+  _createDeferredPass(app);
 }
 
 void RibCage::destroyRenderState(Application& app) {
@@ -139,24 +107,25 @@ void RibCage::destroyRenderState(Application& app) {
 
   Gui::destroyRenderState(app);
 
-  this->_models.clear();
+  m_models.clear();
 
-  this->_pForwardPass.reset();
-  this->_forwardFrameBuffer = {};
-  this->_primitiveConstantsBuffer = {};
+  m_forwardPass = {};
+  m_forwardFrameBuffer = {};
+  m_primitiveConstantsBuffer = {};
 
-  this->_pDeferredPass.reset();
-  this->_swapChainFrameBuffers = {};
+  m_deferredPass = {};
+  m_swapChainFrameBuffers = {};
 
-  this->_pointLights = {};
+  m_pointLights = {};
 
-  this->_SSR = {};
-  this->_globalUniforms = {};
+  m_SSR = {};
+  m_globalUniforms = {};
 
-  this->_globalResources = {};
-  this->_globalHeap = {};
+  m_globalResources = {};
+  m_globalHeap = {};
 
-  this->_debugScene = {};
+  m_skeletonEditor = {};
+  m_debugScene = {};
 }
 
 void RibCage::tick(Application& app, const FrameContext& frame) {
@@ -171,7 +140,7 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
     if (ImGui::Begin("Debug Options")) {
       if (ImGui::CollapsingHeader("Lighting")) {
         ImGui::Text("Exposure:");
-        ImGui::SliderFloat("##exposure", &this->_exposure, 0.0f, 1.0f);
+        ImGui::SliderFloat("##exposure", &m_exposure, 0.0f, 1.0f);
       }
     }
 
@@ -180,27 +149,38 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
     Gui::finishRecordingImgui();
   }
 
-  this->_pCameraController->tick(frame.deltaTime);
-  const Camera& camera = this->_pCameraController->getCamera();
+  m_pCameraController->tick(frame.deltaTime);
+  const Camera& camera = m_pCameraController->getCamera();
 
   const glm::mat4& projection = camera.getProjection();
+
+  const InputManager::MousePos& mPos =
+      app.getInputManager().getCurrentMousePos();
+
+  uint32_t prevInputMask = m_inputMask;
+  m_inputMask = app.getInputManager().getCurrentInputMask();
 
   GlobalUniforms globalUniforms;
   globalUniforms.projection = camera.getProjection();
   globalUniforms.inverseProjection = glm::inverse(globalUniforms.projection);
   globalUniforms.view = camera.computeView();
   globalUniforms.inverseView = glm::inverse(globalUniforms.view);
-  globalUniforms.lightCount = static_cast<int>(this->_pointLights.getCount());
+  globalUniforms.lightCount = static_cast<int>(m_pointLights.getCount());
   globalUniforms.lightBufferHandle =
-      this->_pointLights.getCurrentLightBufferHandle(frame).index;
+      m_pointLights.getCurrentLightBufferHandle(frame).index;
   globalUniforms.time = static_cast<float>(frame.currentTime);
-  globalUniforms.exposure = this->_exposure;
+  globalUniforms.exposure = m_exposure;
+  globalUniforms.mouseUV.x =
+      static_cast<float>(mPos.x / app.getSwapChainExtent().width);
+  globalUniforms.mouseUV.y =
+      static_cast<float>(mPos.y / app.getSwapChainExtent().height);
+  globalUniforms.inputMask = m_inputMask;
 
-  this->_globalUniforms.getCurrentUniformBuffer(frame).updateUniforms(
+  m_globalUniforms.getCurrentUniformBuffer(frame).updateUniforms(
       globalUniforms);
 
-  for (uint32_t i = 0; i < this->_pointLights.getCount(); ++i) {
-    PointLight light = this->_pointLights.getLight(i);
+  for (uint32_t i = 0; i < m_pointLights.getCount(); ++i) {
+    PointLight light = m_pointLights.getLight(i);
 
     light.position = 40.0f * glm::vec3(
                                  static_cast<float>(i / 3),
@@ -210,73 +190,83 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
     light.position.x += 5.5f * cos(1.5f * frame.currentTime + i);
     light.position.z += 5.5f * sin(1.5 * frame.currentTime + i);
 
-    this->_pointLights.setLight(i, light);
+    m_pointLights.setLight(i, light);
   }
 
-  this->_pointLights.updateResource(frame);
+  m_pointLights.updateResource(frame);
+
+  glm::vec2 mouseNdc = 2.0f * globalUniforms.mouseUV - glm::vec2(1.0f);
+  glm::vec4 scrPosWorld = globalUniforms.inverseView *
+                          globalUniforms.inverseProjection *
+                          glm::vec4(mouseNdc, 0.0f, 1.0f);
+  glm::vec3 camPos(globalUniforms.inverseView[3]);
+  glm::vec3 cursorDir =
+      glm::normalize(glm::vec3(scrPosWorld) / scrPosWorld.w - camPos);
+  m_skeletonEditor.update(m_debugScene, camPos, cursorDir, prevInputMask, m_inputMask);
+  m_debugScene.update(frame);
 }
 
 void RibCage::_createModels(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
 
-  this->_models.emplace_back(
+  m_models.emplace_back(
       app,
       commandBuffer,
       GEngineDirectory + "/Content/Models/DamagedHelmet.glb");
-  this->_models.back().setModelTransform(glm::scale(
+  m_models.back().setModelTransform(glm::scale(
       glm::translate(glm::mat4(1.0f), glm::vec3(36.0f, 0.0f, 0.0f)),
       glm::vec3(4.0f)));
 
-  this->_models.emplace_back(
+  m_models.emplace_back(
       app,
       commandBuffer,
       GEngineDirectory + "/Content/Models/FlightHelmet/FlightHelmet.gltf");
-  this->_models.back().setModelTransform(glm::scale(
+  m_models.back().setModelTransform(glm::scale(
       glm::translate(glm::mat4(1.0f), glm::vec3(50.0f, -1.0f, 0.0f)),
       glm::vec3(8.0f)));
 
-  this->_models.emplace_back(
+  m_models.emplace_back(
       app,
       commandBuffer,
       GEngineDirectory + "/Content/Models/MetalRoughSpheres.glb");
-  this->_models.back().setModelTransform(glm::scale(
+  m_models.back().setModelTransform(glm::scale(
       glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)),
       glm::vec3(4.0f)));
 
-  this->_models.emplace_back(
-      app,
-      commandBuffer,
-      GEngineDirectory + "/Content/Models/Sponza/glTF/Sponza.gltf");
-  this->_models.back().setModelTransform(glm::translate(
-      glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
-      glm::vec3(10.0f, -1.0f, 0.0f)));
+  // m_models.emplace_back(
+  //     app,
+  //     commandBuffer,
+  //     GEngineDirectory + "/Content/Models/Sponza/glTF/Sponza.gltf");
+  // m_models.back().setModelTransform(glm::translate(
+  //     glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
+  //     glm::vec3(10.0f, -1.0f, 0.0f)));
 }
 
 void RibCage::_createGlobalResources(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
-  this->_globalHeap = GlobalHeap(app);
-  this->_globalUniforms = GlobalUniformsResource(app, this->_globalHeap);
+  m_globalHeap = GlobalHeap(app);
+  m_globalUniforms = GlobalUniformsResource(app, m_globalHeap);
 
   // Create GLTF resource heaps
   {
-    this->_createModels(app, commandBuffer);
+    _createModels(app, commandBuffer);
 
-    for (Model& model : this->_models) {
-      model.registerToHeap(this->_globalHeap);
+    for (Model& model : m_models) {
+      model.registerToHeap(m_globalHeap);
     }
 
     uint32_t primCount = 0;
-    for (const Model& model : this->_models)
+    for (const Model& model : m_models)
       primCount += static_cast<uint32_t>(model.getPrimitivesCount());
 
-    this->_primitiveConstantsBuffer =
+    m_primitiveConstantsBuffer =
         StructuredBuffer<PrimitiveConstants>(app, primCount);
 
-    for (const Model& model : this->_models) {
+    for (const Model& model : m_models) {
       for (const Primitive& primitive : model.getPrimitives()) {
-        this->_primitiveConstantsBuffer.setElement(
+        m_primitiveConstantsBuffer.setElement(
             primitive.getConstants(),
             primitive.getPrimitiveIndex());
       }
@@ -284,21 +274,21 @@ void RibCage::_createGlobalResources(
 
     // The primitive constant buffers contain all the bindless
     // indices for the primitive texture resources
-    this->_primitiveConstantsBuffer.upload(app, commandBuffer);
-    this->_primitiveConstantsBuffer.registerToHeap(this->_globalHeap);
+    m_primitiveConstantsBuffer.upload(app, commandBuffer);
+    m_primitiveConstantsBuffer.registerToHeap(m_globalHeap);
 
-    // this->_textureHeap = TextureHeap(this->_models);
+    // m_textureHeap = TextureHeap(m_models);
   }
 
   // Global resources
   {
-    this->_pointLights = PointLightCollection(
+    m_pointLights = PointLightCollection(
         app,
         commandBuffer,
-        this->_globalHeap,
+        m_globalHeap,
         9,
         true,
-        this->_primitiveConstantsBuffer.getHandle());
+        m_primitiveConstantsBuffer.getHandle());
     for (uint32_t i = 0; i < 3; ++i) {
       for (uint32_t j = 0; j < 3; ++j) {
         PointLight light;
@@ -312,26 +302,26 @@ void RibCage::_createGlobalResources(
             1000.0f * // / static_cast<float>(i + 1) *
             glm::vec3(cos(t) + 1.0f, sin(t + 1.0f) + 1.0f, sin(t) + 1.0f);
 
-        this->_pointLights.setLight(i * 3 + j, light);
+        m_pointLights.setLight(i * 3 + j, light);
       }
     }
   }
 
-  this->_globalResources = GlobalResources(
+  m_globalResources = GlobalResources(
       app,
       commandBuffer,
-      this->_globalHeap,
-      this->_pointLights.getShadowMapHandle(),
-      this->_primitiveConstantsBuffer.getHandle());
+      m_globalHeap,
+      m_pointLights.getShadowMapHandle(),
+      m_primitiveConstantsBuffer.getHandle());
 
   // Set up SSR resources
-  this->_SSR = ScreenSpaceReflection(
+  m_SSR = ScreenSpaceReflection(
       app,
       commandBuffer,
-      this->_globalHeap.getDescriptorSetLayout());
-  this->_SSR.getReflectionBuffer().registerToHeap(this->_globalHeap);
+      m_globalHeap.getDescriptorSetLayout());
+  m_SSR.getReflectionBuffer().registerToHeap(m_globalHeap);
 
-  this->_debugScene = SelectableScene(app, commandBuffer);
+  m_debugScene = SelectableScene(app, commandBuffer);
 }
 
 void RibCage::_createForwardPass(Application& app) {
@@ -367,7 +357,7 @@ void RibCage::_createForwardPass(Application& app) {
         // Pipeline resource layouts
         .layoutBuilder
         // Global resources (view, projection, environment map)
-        .addDescriptorSet(this->_globalHeap.getDescriptorSetLayout())
+        .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
         .addPushConstants<ForwardPassPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
@@ -384,23 +374,20 @@ void RibCage::_createForwardPass(Application& app) {
 
     SelectableScene::buildPipeline(
         subpassBuilder.pipelineBuilder,
-        this->_globalHeap.getDescriptorSetLayout());
+        m_globalHeap.getDescriptorSetLayout());
   }
 
-  const GBufferResources& gBuffer = this->_globalResources.getGBuffer();
+  const GBufferResources& gBuffer = m_globalResources.getGBuffer();
   std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
   const VkExtent2D& extent = app.getSwapChainExtent();
-  this->_pForwardPass = std::make_unique<RenderPass>(
+  m_forwardPass = RenderPass(
       app,
       extent,
       std::move(attachments),
       std::move(subpassBuilders));
 
-  this->_forwardFrameBuffer = FrameBuffer(
-      app,
-      *this->_pForwardPass,
-      extent,
-      gBuffer.getAttachmentViews());
+  m_forwardFrameBuffer =
+      FrameBuffer(app, m_forwardPass, extent, gBuffer.getAttachmentViews());
 }
 
 void RibCage::_createDeferredPass(Application& app) {
@@ -449,8 +436,7 @@ void RibCage::_createDeferredPass(Application& app) {
             defs)
 
         // Pipeline resource layouts
-        .layoutBuilder
-        .addDescriptorSet(this->_globalHeap.getDescriptorSetLayout())
+        .layoutBuilder.addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
         .addPushConstants<DeferredPassPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
@@ -458,21 +444,21 @@ void RibCage::_createDeferredPass(Application& app) {
   // TODO: Really light objects should be rendered in the forward
   // pass as well and an emissive channel should be added to the
   // G-Buffer
-  this->_pointLights.setupPointLightMeshSubpass(
+  m_pointLights.setupPointLightMeshSubpass(
       subpassBuilders.emplace_back(),
       0,
       1,
-      this->_globalHeap.getDescriptorSetLayout());
+      m_globalHeap.getDescriptorSetLayout());
 
-  this->_pDeferredPass = std::make_unique<RenderPass>(
+  m_deferredPass = RenderPass(
       app,
       app.getSwapChainExtent(),
       std::move(attachments),
       std::move(subpassBuilders));
 
-  this->_swapChainFrameBuffers = SwapChainFrameBufferCollection(
+  m_swapChainFrameBuffers = SwapChainFrameBufferCollection(
       app,
-      *this->_pDeferredPass,
+      m_deferredPass,
       {app.getDepthImageView()});
 }
 
@@ -490,39 +476,35 @@ void RibCage::draw(
     VkCommandBuffer commandBuffer,
     const FrameContext& frame) {
 
-  this->_pointLights.updateResource(frame);
-  this->_globalResources.getGBuffer().transitionToAttachment(commandBuffer);
+  m_pointLights.updateResource(frame);
+  m_globalResources.getGBuffer().transitionToAttachment(commandBuffer);
 
-  VkDescriptorSet heapDescriptorSet = this->_globalHeap.getDescriptorSet();
+  VkDescriptorSet heapDescriptorSet = m_globalHeap.getDescriptorSet();
 
   // Draw point light shadow maps
-  this->_pointLights.drawShadowMaps(
+  m_pointLights.drawShadowMaps(
       app,
       commandBuffer,
       frame,
-      this->_models,
+      m_models,
       heapDescriptorSet,
-      this->_globalResources.getHandle());
+      m_globalResources.getHandle());
 
   // Forward pass
   {
     ForwardPassPushConstants push{};
-    push.globalResources =
-        this->_globalResources.getConstants().getHandle().index;
+    push.globalResources = m_globalResources.getConstants().getHandle().index;
     push.globalUniforms =
-        this->_globalUniforms.getCurrentBindlessHandle(frame).index;
+        m_globalUniforms.getCurrentBindlessHandle(frame).index;
 
-    ActiveRenderPass pass = this->_pForwardPass->begin(
-        app,
-        commandBuffer,
-        frame,
-        this->_forwardFrameBuffer);
+    ActiveRenderPass pass =
+        m_forwardPass.begin(app, commandBuffer, frame, m_forwardFrameBuffer);
     // Bind global descriptor sets
     pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
     pass.getDrawContext().bindDescriptorSets();
 
     // Draw models
-    for (const Model& model : this->_models) {
+    for (const Model& model : m_models) {
       for (const Primitive& primitive : model.getPrimitives()) {
         push.model = primitive.computeWorldTransform();
         push.primitiveIdx =
@@ -538,38 +520,38 @@ void RibCage::draw(
 
     pass.nextSubpass();
 
-    this->_debugScene.drawSubpass(
+    m_debugScene.drawSubpass(
         pass.getDrawContext(),
-        this->_globalUniforms.getCurrentBindlessHandle(frame));
+        m_globalUniforms.getCurrentBindlessHandle(frame));
   }
 
-  this->_globalResources.getGBuffer().transitionToTextures(commandBuffer);
+  m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
 
   // Reflection buffer and convolution
   {
-    this->_SSR.captureReflection(
+    m_SSR.captureReflection(
         app,
         commandBuffer,
         heapDescriptorSet,
         frame,
-        this->_globalUniforms.getCurrentBindlessHandle(frame),
-        this->_globalResources.getHandle());
-    this->_SSR.convolveReflectionBuffer(app, commandBuffer, frame);
+        m_globalUniforms.getCurrentBindlessHandle(frame),
+        m_globalResources.getHandle());
+    m_SSR.convolveReflectionBuffer(app, commandBuffer, frame);
   }
 
   // Deferred pass
   {
     DeferredPassPushConstants push{};
-    push.globalResources = this->_globalResources.getHandle().index;
+    push.globalResources = m_globalResources.getHandle().index;
     push.globalUniforms =
-        this->_globalUniforms.getCurrentBindlessHandle(frame).index;
-    push.reflectionBuffer = this->_SSR.getReflectionBuffer().getHandle().index;
+        m_globalUniforms.getCurrentBindlessHandle(frame).index;
+    push.reflectionBuffer = m_SSR.getReflectionBuffer().getHandle().index;
 
-    ActiveRenderPass pass = this->_pDeferredPass->begin(
+    ActiveRenderPass pass = m_deferredPass.begin(
         app,
         commandBuffer,
         frame,
-        this->_swapChainFrameBuffers.getCurrentFrameBuffer(frame));
+        m_swapChainFrameBuffers.getCurrentFrameBuffer(frame));
     // Bind global descriptor sets
     pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
     pass.getDrawContext().updatePushConstants(push, 0);
@@ -582,9 +564,9 @@ void RibCage::draw(
 
     pass.nextSubpass();
     pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
-    this->_pointLights.draw(
+    m_pointLights.draw(
         pass.getDrawContext(),
-        this->_globalUniforms.getCurrentBindlessHandle(frame));
+        m_globalUniforms.getCurrentBindlessHandle(frame));
   }
 
   Gui::draw(app, frame, commandBuffer);
