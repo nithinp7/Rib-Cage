@@ -4,9 +4,12 @@
 #include <Althea/BindlessHandle.h>
 #include <Althea/DrawContext.h>
 #include <Althea/DynamicVertexBuffer.h>
-#include <Althea/GraphicsPipeline.h>
+#include <Althea/Framebuffer.h>
+#include <Althea/GlobalResources.h>
 #include <Althea/IndexBuffer.h>
+#include <Althea/RenderPass.h>
 #include <Althea/VertexBuffer.h>
+#include <Althea/GlobalHeap.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
@@ -16,11 +19,9 @@
 
 using namespace AltheaEngine;
 
-#define BIT(x) (1<<x)
+#define BIT(x) (1 << x)
 namespace RibCage {
-enum SelectionInfoMaskBits : uint32_t {
-  SELECTED = BIT(0)
-};
+enum SelectionInfoMaskBits : uint32_t { SELECTED = BIT(0) };
 
 struct SelectableVertex {
   alignas(16) glm::vec3 position;
@@ -32,12 +33,12 @@ struct SelectableVertex {
 // Debug scene elements that are selectable
 class SelectableScene {
 public:
-  static void buildPipeline(
-      GraphicsPipelineBuilder& builder,
-      VkDescriptorSetLayout heapLayout);
-
   SelectableScene() = default;
-  SelectableScene(Application& app, VkCommandBuffer commandBuffer);
+  SelectableScene(
+      Application& app,
+      GlobalHeap& heap,
+      VkCommandBuffer commandBuffer,
+      const GBufferResources& gBuffer);
 
   int addVertex(const glm::vec3& pos) {
     if (m_currentVertCount == MAX_SELECTABLE_VERTS_COUNT)
@@ -61,9 +62,7 @@ public:
     m_selection.push_back(idx);
   }
 
-  void addToSelection(int idx) {
-    m_selection.push_back(idx);
-  }
+  void addToSelection(int idx) { m_selection.push_back(idx); }
 
   void clearSelection() { m_selection.clear(); }
 
@@ -82,8 +81,12 @@ public:
       const glm::vec3& cursorDir,
       bool bAddToSelection);
 
-  void
-  drawSubpass(const DrawContext& context, UniformHandle globalUniformsHandle);
+  void draw(
+      const Application& app,
+      VkCommandBuffer commandBuffer,
+      const FrameContext& frame,
+      VkDescriptorSet heapSet,
+      UniformHandle globalUniformsHandle);
 
 private:
   SelectableVertex m_selectableVertices[MAX_SELECTABLE_VERTS_COUNT];
@@ -96,5 +99,11 @@ private:
   DynamicVertexBuffer<SelectableVertex> m_selectableVB;
   VertexBuffer<glm::vec3> m_sphereVB;
   IndexBuffer m_sphereIB;
+
+  VertexBuffer<glm::vec3> m_cylinderVB;
+  IndexBuffer m_cylinderIB;
+
+  RenderPass m_pass;
+  FrameBuffer m_frameBuffer;
 };
 } // namespace RibCage

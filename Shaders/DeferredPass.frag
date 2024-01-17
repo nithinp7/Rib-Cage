@@ -154,7 +154,8 @@ void main() {
 
   vec3 reflectedDirection = reflect(normalize(direction), normal);
   // vec4 reflectedColor = sampleReflection(0.2);//metallicRoughnessOcclusion.y);
-  vec4 reflectedColor = sampleReflection(metallicRoughnessOcclusion.y);
+  vec4 reflectedColor = vec4(sampleEnvMap(reflectedDirection, metallicRoughnessOcclusion.y), 1.0);
+  // vec4 reflectedColor = sampleReflection(metallicRoughnessOcclusion.y);
   // reflectedColor = reflectedColor / reflectedColor.a;
   // reflectedColor.rgb = mix(baseColor, reflectedColor.rgb, reflectedColor.a);
 

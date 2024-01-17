@@ -8,37 +8,67 @@
 namespace {
 struct PushConstants {
   uint32_t globalUniformsHandle;
+  uint32_t selectableVBHandle;
   float selectionRadius;
 };
 } // namespace
 namespace RibCage {
-/*static*/
-void SelectableScene::buildPipeline(
-    GraphicsPipelineBuilder& builder,
-    VkDescriptorSetLayout heapLayout) {
-  builder
-      // instance data
-      .addVertexInputBinding<SelectableVertex>(VK_VERTEX_INPUT_RATE_INSTANCE)
-      .addVertexAttribute(VertexAttributeType::VEC3, 0)
-      .addVertexAttribute(VertexAttributeType::UINT, offsetof(SelectableVertex, infoMask))
-      // vertex data
-      .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
-      .addVertexAttribute(VertexAttributeType::VEC3, 0) // vert pos
-
-      .addVertexShader(GProjectDirectory + "/Shaders/SelectableVertex.vert")
-      .addFragmentShader(GProjectDirectory + "/Shaders/SelectableVertex.frag")
-
-      .layoutBuilder //
-      .addDescriptorSet(heapLayout)
-      .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
-}
-
 SelectableScene::SelectableScene(
     Application& app,
-    VkCommandBuffer commandBuffer) {
+    GlobalHeap& heap,
+    VkCommandBuffer commandBuffer,
+    const GBufferResources& gBuffer) {
   m_selectableVB =
       DynamicVertexBuffer<SelectableVertex>(app, MAX_SELECTABLE_VERTS_COUNT);
-  ShapeUtilities::createSphere(app, commandBuffer, m_sphereVB, m_sphereIB, 8);
+  m_selectableVB.registerToHeap(heap);
+
+  ShapeUtilities::createSphere(app, commandBuffer, m_sphereVB, m_sphereIB, 16);
+  ShapeUtilities::createCylinder(
+      app,
+      commandBuffer,
+      m_cylinderVB,
+      m_cylinderIB,
+      16);
+
+  std::vector<SubpassBuilder> builders;
+  {
+    SubpassBuilder& builder = builders.emplace_back();
+
+    // The GBuffer contains the following color attachments
+    // 1. Position
+    // 2. Normal
+    // 3. Albedo
+    // 4. Metallic-Roughness-Occlusion
+    builder.colorAttachments = {0, 1, 2, 3};
+    builder.depthAttachment = 4;
+
+    builder.pipelineBuilder
+        .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
+        .addVertexAttribute(VertexAttributeType::VEC3, 0)
+
+        .addVertexShader(GProjectDirectory + "/Shaders/SelectableVertex.vert")
+        .addFragmentShader(
+            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+
+        .layoutBuilder //
+        .addDescriptorSet(heap.getDescriptorSetLayout())
+        .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
+  }
+
+  std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
+  for (auto& attachment : attachments)
+    attachment.load = true;
+
+  m_pass = RenderPass(
+      app,
+      app.getSwapChainExtent(),
+      std::move(attachments),
+      std::move(builders));
+  m_frameBuffer = FrameBuffer(
+      app,
+      m_pass,
+      app.getSwapChainExtent(),
+      gBuffer.getAttachmentViews());
 }
 
 bool SelectableScene::trySelect(
@@ -75,30 +105,42 @@ void SelectableScene::update(const FrameContext& frame) {
     m_selectableVertices[i].infoMask &= ~SelectionInfoMaskBits::SELECTED;
   for (int selected : m_selection)
     m_selectableVertices[selected].infoMask |= SelectionInfoMaskBits::SELECTED;
-  
 
   m_selectableVB.updateVertices(
       frame.frameRingBufferIndex,
       gsl::span(m_selectableVertices, MAX_SELECTABLE_VERTS_COUNT));
 }
 
-void SelectableScene::drawSubpass(
-    const DrawContext& context,
+void SelectableScene::draw(
+    const Application& app,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame,
+    VkDescriptorSet heapSet,
     UniformHandle globalUniformsHandle) {
-  PushConstants constants{};
-  constants.globalUniformsHandle = globalUniformsHandle.index;
-  constants.selectionRadius = SELECTION_RADIUS;
-  context.updatePushConstants(constants, 0);
-  context.bindDescriptorSets();
-  context.bindIndexBuffer(m_sphereIB);
 
-  VkBuffer VBs[] = {
-      m_selectableVB.getBuffer(),
-      m_sphereVB.getAllocation().getBuffer()};
-  VkDeviceSize offsets[] = {0, 0};
-  vkCmdBindVertexBuffers(context.getCommandBuffer(), 0, 2, VBs, offsets);
+  {
+    PushConstants constants{};
+    constants.globalUniformsHandle = globalUniformsHandle.index;
+    constants.selectableVBHandle =
+        m_selectableVB.getCurrentBufferHandle(frame.frameRingBufferIndex).index;
+    constants.selectionRadius = SELECTION_RADIUS;
 
-  context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+    ActiveRenderPass pass =
+        m_pass.begin(app, commandBuffer, frame, m_frameBuffer);
+
+    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
+
+    const DrawContext& context = pass.getDrawContext();
+    context.updatePushConstants(constants, 0);
+    context.bindDescriptorSets();
+    // context.bindVertexBuffer(m_sphereVB);
+    // context.bindIndexBuffer(m_sphereIB);
+    // TODO testing
+    context.bindVertexBuffer(m_cylinderVB);
+    context.bindIndexBuffer(m_cylinderIB);
+
+    context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+  }
 }
 
 bool SelectableVertex::intersect(

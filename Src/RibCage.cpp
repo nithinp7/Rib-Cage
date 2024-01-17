@@ -202,7 +202,8 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   glm::vec3 camPos(globalUniforms.inverseView[3]);
   glm::vec3 cursorDir =
       glm::normalize(glm::vec3(scrPosWorld) / scrPosWorld.w - camPos);
-  m_skeletonEditor.update(m_debugScene, camPos, cursorDir, prevInputMask, m_inputMask);
+  m_skeletonEditor
+      .update(m_debugScene, camPos, cursorDir, prevInputMask, m_inputMask);
   m_debugScene.update(frame);
 }
 
@@ -321,7 +322,11 @@ void RibCage::_createGlobalResources(
       m_globalHeap.getDescriptorSetLayout());
   m_SSR.getReflectionBuffer().registerToHeap(m_globalHeap);
 
-  m_debugScene = SelectableScene(app, commandBuffer);
+  m_debugScene = SelectableScene(
+      app,
+      m_globalHeap,
+      commandBuffer,
+      m_globalResources.getGBuffer());
 }
 
 void RibCage::_createForwardPass(Application& app) {
@@ -359,22 +364,6 @@ void RibCage::_createForwardPass(Application& app) {
         // Global resources (view, projection, environment map)
         .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
         .addPushConstants<ForwardPassPushConstants>(VK_SHADER_STAGE_ALL);
-  }
-
-  {
-    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
-
-    // The GBuffer contains the following color attachments
-    // 1. Position
-    // 2. Normal
-    // 3. Albedo
-    // 4. Metallic-Roughness-Occlusion
-    subpassBuilder.colorAttachments = {0, 1, 2, 3};
-    subpassBuilder.depthAttachment = 4;
-
-    SelectableScene::buildPipeline(
-        subpassBuilder.pipelineBuilder,
-        m_globalHeap.getDescriptorSetLayout());
   }
 
   const GBufferResources& gBuffer = m_globalResources.getGBuffer();
@@ -517,13 +506,14 @@ void RibCage::draw(
             primitive.getIndexBuffer());
       }
     }
-
-    pass.nextSubpass();
-
-    m_debugScene.drawSubpass(
-        pass.getDrawContext(),
-        m_globalUniforms.getCurrentBindlessHandle(frame));
   }
+
+  m_debugScene.draw(
+      app,
+      commandBuffer,
+      frame,
+      heapDescriptorSet,
+      m_globalUniforms.getCurrentBindlessHandle(frame));
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
 
