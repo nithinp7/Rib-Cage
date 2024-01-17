@@ -88,6 +88,8 @@ public:
       VkDescriptorSet heapSet,
       UniformHandle globalUniformsHandle);
 
+  void tryRecompileShaders(Application& app) { m_pass.tryRecompile(app); }
+
 private:
   SelectableVertex m_selectableVertices[MAX_SELECTABLE_VERTS_COUNT];
   uint32_t m_currentVertCount = 0;

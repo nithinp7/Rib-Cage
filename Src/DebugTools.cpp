@@ -31,6 +31,8 @@ SelectableScene::SelectableScene(
       16);
 
   std::vector<SubpassBuilder> builders;
+
+  // Selectable nodes
   {
     SubpassBuilder& builder = builders.emplace_back();
 
@@ -47,6 +49,31 @@ SelectableScene::SelectableScene(
         .addVertexAttribute(VertexAttributeType::VEC3, 0)
 
         .addVertexShader(GProjectDirectory + "/Shaders/SelectableVertex.vert")
+        .addFragmentShader(
+            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+
+        .layoutBuilder //
+        .addDescriptorSet(heap.getDescriptorSetLayout())
+        .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
+  }
+
+  // Translation gizmos
+  {
+    SubpassBuilder& builder = builders.emplace_back();
+
+    // The GBuffer contains the following color attachments
+    // 1. Position
+    // 2. Normal
+    // 3. Albedo
+    // 4. Metallic-Roughness-Occlusion
+    builder.colorAttachments = {0, 1, 2, 3};
+    builder.depthAttachment = 4;
+
+    builder.pipelineBuilder
+        .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
+        .addVertexAttribute(VertexAttributeType::VEC3, 0)
+
+        .addVertexShader(GProjectDirectory + "/Shaders/TranslateGizmo.vert")
         .addFragmentShader(
             GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
 
@@ -133,13 +160,16 @@ void SelectableScene::draw(
     const DrawContext& context = pass.getDrawContext();
     context.updatePushConstants(constants, 0);
     context.bindDescriptorSets();
-    // context.bindVertexBuffer(m_sphereVB);
-    // context.bindIndexBuffer(m_sphereIB);
-    // TODO testing
+
+    context.bindVertexBuffer(m_sphereVB);
+    context.bindIndexBuffer(m_sphereIB);
+    context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+
+    pass.nextSubpass();
+
     context.bindVertexBuffer(m_cylinderVB);
     context.bindIndexBuffer(m_cylinderIB);
-
-    context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+    context.drawIndexed(m_cylinderIB.getIndexCount(), 3 * m_currentVertCount);
   }
 }
 

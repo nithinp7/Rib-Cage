@@ -4,7 +4,7 @@ layout(location=0) in vec3 localVertPos;
 
 layout(location=0) out vec3 outPosition;
 layout(location=1) out vec3 outNormal;
-layout(location=2) out vec4 outColor;
+layout(location=2) out vec3 outColor;
 layout(location=3) out vec3 outMetallicRoughnessOcclusion;
 
 #include "Common.glsl"
@@ -30,10 +30,10 @@ void main() {
   if (bool(selectable.infoMask & INFO_BIT_SELECTED)) 
   {
     // Selected nodes yellow
-    outColor = vec4(1.0, 1.0, 0.0, 1.0);
+    outColor = vec3(1.0, 1.0, 0.0);
   } else {
     // All other nodes red
-    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+    outColor = vec3(1.0, 0.0, 0.0);
   }
 
   outMetallicRoughnessOcclusion = vec3(0.0, 1.0, 1.0);

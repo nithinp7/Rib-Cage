@@ -1,0 +1,15 @@
+ROADMAP
+
+There are lots of long-term / high-level goals for this project, I will fill those in here after some of the more basic stuff is implemented...
+
+Short-term:
+Debug functionality:
+- Basic skeleton editor
+- Selectable nodes, translation / rotation gizmos, orbital camera, orthographic camera
+- Might be useful to have generic selectable nodes buffer + compute pass to generate indirect drawlists
+   - e.g., indirect draw lists for gizmos only on selected nodes?
+- Need better picking? GPU picking?
+- Serializing / deserializing skeleton 
+
+Once all of that is sorted out, can start on some basic IK solvers and procedural animation stuff
+Can also use the skeleton editor to specify various spring constraints / motors

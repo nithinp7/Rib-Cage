@@ -76,6 +76,7 @@ void RibCage::initGame(Application& app) {
         that->m_pointLights.getShadowMapPass().tryRecompile(app);
         that->m_forwardPass.tryRecompile(app);
         that->m_deferredPass.tryRecompile(app);
+        that->m_debugScene.tryRecompileShaders(app);
       });
 
   input.addMousePositionCallback(
