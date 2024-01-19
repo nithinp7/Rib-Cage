@@ -5,11 +5,21 @@
 #include <limits>
 
 #define SELECTION_RADIUS 0.5f
+#define GIZMO_LENGTH 5.0f
+
 namespace {
 struct PushConstants {
   uint32_t globalUniformsHandle;
   uint32_t selectableVBHandle;
   float selectionRadius;
+};
+
+struct GizmoPushConstants {
+  alignas(16) glm::vec3 gizmoPos;
+  alignas(4) float gizmoScale;
+  float gizmoLength;
+  uint32_t gizmoPart; // 0 for the cylinders 1 for sphere
+  uint32_t globalUniformsHandle;
 };
 } // namespace
 namespace RibCage {
@@ -18,6 +28,10 @@ SelectableScene::SelectableScene(
     GlobalHeap& heap,
     VkCommandBuffer commandBuffer,
     const GBufferResources& gBuffer) {
+  m_gizmoVertices[0].position = glm::vec3(GIZMO_LENGTH, 0.0f, 0.0f);
+  m_gizmoVertices[1].position = glm::vec3(0.0f, GIZMO_LENGTH, 0.0f);
+  m_gizmoVertices[2].position = glm::vec3(0.0f, 0.0f, GIZMO_LENGTH);
+
   m_selectableVB =
       DynamicVertexBuffer<SelectableVertex>(app, MAX_SELECTABLE_VERTS_COUNT);
   m_selectableVB.registerToHeap(heap);
@@ -79,7 +93,7 @@ SelectableScene::SelectableScene(
 
         .layoutBuilder //
         .addDescriptorSet(heap.getDescriptorSetLayout())
-        .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
+        .addPushConstants<GizmoPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
   std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
@@ -98,32 +112,37 @@ SelectableScene::SelectableScene(
       gBuffer.getAttachmentViews());
 }
 
-bool SelectableScene::trySelect(
-    const glm::vec3& cameraPos,
-    const glm::vec3& cursorDir,
-    bool bAddToSelection) {
+SceneQueryResult
+SelectableScene::query(const glm::vec3& cameraPos, const glm::vec3& cursorDir) {
+  SceneQueryResult result{};
+  result.hitType = QHT_NONE;
+  result.t = std::numeric_limits<float>::max();
+  result.index = -1;
 
-  int selectedIndex = -1;
-  float minT = std::numeric_limits<float>::max();
   for (int i = 0; i < m_currentVertCount; ++i) {
-    SelectableVertex& vertex = m_selectableVertices[i];
+    SelectableVertex& v = m_selectableVertices[i];
     float t;
-    if (vertex.intersect(cameraPos, cursorDir, t) && t < minT) {
-      selectedIndex = i;
-      minT = t;
+    if (v.intersect(cameraPos, cursorDir, t) && t < result.t) {
+      result.hitType = QHT_VERTEX;
+      result.index = i;
+      result.t = t;
     }
   }
 
-  if (selectedIndex != -1) {
-    if (bAddToSelection)
-      addToSelection(selectedIndex);
-    else
-      selectVertex(selectedIndex);
-
-    return true;
+  if (m_bEnableGizmo) {
+    for (int i = 0; i < 3; ++i) {
+      SelectableVertex& v = m_gizmoVertices[i];
+      float t;
+      if (v.intersect(cameraPos - m_gizmoPosition, cursorDir, t) &&
+          t < result.t) {
+        result.hitType = QHT_GIZMO_HANDLE;
+        result.index = i;
+        result.t = t;
+      }
+    }
   }
 
-  return false;
+  return result;
 }
 
 void SelectableScene::update(const FrameContext& frame) {
@@ -146,11 +165,6 @@ void SelectableScene::draw(
     UniformHandle globalUniformsHandle) {
 
   {
-    PushConstants constants{};
-    constants.globalUniformsHandle = globalUniformsHandle.index;
-    constants.selectableVBHandle =
-        m_selectableVB.getCurrentBufferHandle(frame.frameRingBufferIndex).index;
-    constants.selectionRadius = SELECTION_RADIUS;
 
     ActiveRenderPass pass =
         m_pass.begin(app, commandBuffer, frame, m_frameBuffer);
@@ -158,18 +172,44 @@ void SelectableScene::draw(
     pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
 
     const DrawContext& context = pass.getDrawContext();
-    context.updatePushConstants(constants, 0);
-    context.bindDescriptorSets();
+    {
+      PushConstants constants{};
+      constants.globalUniformsHandle = globalUniformsHandle.index;
+      constants.selectableVBHandle =
+          m_selectableVB.getCurrentBufferHandle(frame.frameRingBufferIndex)
+              .index;
+      constants.selectionRadius = SELECTION_RADIUS;
+      context.updatePushConstants(constants, 0);
+      context.bindDescriptorSets();
 
-    context.bindVertexBuffer(m_sphereVB);
-    context.bindIndexBuffer(m_sphereIB);
-    context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+      context.bindVertexBuffer(m_sphereVB);
+      context.bindIndexBuffer(m_sphereIB);
+      context.drawIndexed(m_sphereIB.getIndexCount(), m_currentVertCount);
+    }
 
     pass.nextSubpass();
 
-    context.bindVertexBuffer(m_cylinderVB);
-    context.bindIndexBuffer(m_cylinderIB);
-    context.drawIndexed(m_cylinderIB.getIndexCount(), 3 * m_currentVertCount);
+    if (m_bEnableGizmo) {
+      GizmoPushConstants constants{};
+      constants.globalUniformsHandle = globalUniformsHandle.index;
+      constants.gizmoScale = SELECTION_RADIUS;
+      constants.gizmoLength = GIZMO_LENGTH;
+      constants.gizmoPart = 0;
+      constants.gizmoPos = m_gizmoPosition;
+
+      context.updatePushConstants(constants, 0);
+      context.bindDescriptorSets();
+      context.bindVertexBuffer(m_cylinderVB);
+      context.bindIndexBuffer(m_cylinderIB);
+      context.drawIndexed(m_cylinderIB.getIndexCount(), 3);
+
+      constants.gizmoPart = 1;
+      context.updatePushConstants(constants, 0);
+      context.bindDescriptorSets();
+      context.bindVertexBuffer(m_sphereVB);
+      context.bindIndexBuffer(m_sphereIB);
+      context.drawIndexed(m_sphereIB.getIndexCount(), 3);
+    }
   }
 }
 

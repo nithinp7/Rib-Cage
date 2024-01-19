@@ -46,6 +46,10 @@ public:
 private:
   Skeleton m_skeleton{};
 
+  int m_gizmoAxis{};
+  bool m_bDraggingGizmo{};
+  glm::vec3 m_originalGizmoPosition{};
+  
   // Constraints for spawning new vertices
   glm::vec3 m_constraintPlane;
   glm::vec3 m_constraintPoint;

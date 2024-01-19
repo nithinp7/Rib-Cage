@@ -12,26 +12,28 @@ layout(location=3) out vec3 outMetallicRoughnessOcclusion;
 #include <Global/GlobalUniforms.glsl>
 
 layout(push_constant) uniform PushConstants {
+  vec3 gizmoPos;
+  float gizmoScale;
+  float gizmoLength;
+  uint gizmoPart; // 0 for the cylinders 1 for sphere
   uint globalUniformsHandle;
-  uint selectableVBHandle;
-  float selectionRadius;
 } pushConstants;
 
-#define selectables RESOURCE(selectableVB, pushConstants.selectableVBHandle).vertices
 #define globals RESOURCE(globalUniforms, pushConstants.globalUniformsHandle)
 
 void main() {
-  // Expect instance count = 3 * selectables count
-  // (one for each axis on the gizmo)
-  uint selectableIdx = gl_InstanceIndex / 3;
   uint axis = gl_InstanceIndex % 3;
-  Selectable selectable = selectables[selectableIdx];
 
   // Hacky normal, does not look great for cylinders...
   vec3 normal = inLocalVertPos;
   vec3 localVertPos = inLocalVertPos;
-  localVertPos += vec3(0.0, 0.0, 1.0);
-  localVertPos *= vec3(0.25, 0.25, 2.5);
+  if (pushConstants.gizmoPart == 0) {
+    localVertPos *= vec3(0.25, 0.25, 0.5 * pushConstants.gizmoLength);
+    localVertPos += vec3(0.0, 0.0, 0.5 * pushConstants.gizmoLength);
+  } else {
+    localVertPos *= pushConstants.gizmoScale;
+    localVertPos += vec3(0.0, 0.0, pushConstants.gizmoLength);
+  }
 
   // Reorient cylinder depending on which axis we are drawing.
   // The cylinder coords point in the z-direction by default, so
@@ -54,7 +56,7 @@ void main() {
   // outAlpha = bool(selectable.infoMask & INFO_BIT_SELECTED) ? 1.0 : 0.0;
 
   outNormal = normalize(normal);
-  outPosition = selectable.position + pushConstants.selectionRadius * localVertPos;
+  outPosition = pushConstants.gizmoPos +  localVertPos;
   gl_Position = globals.projection * globals.view * vec4(outPosition, 1.0);
 
   outMetallicRoughnessOcclusion = vec3(0.0, 1.0, 1.0);
