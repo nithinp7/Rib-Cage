@@ -77,6 +77,7 @@ void RibCage::initGame(Application& app) {
         that->m_forwardPass.tryRecompile(app);
         that->m_deferredPass.tryRecompile(app);
         that->m_debugScene.tryRecompileShaders(app);
+        that->m_skeletonEditor.tryRecompileShaders(app);
       });
 
   input.addMousePositionCallback(
@@ -98,6 +99,7 @@ void RibCage::createRenderState(Application& app) {
   Gui::createRenderState(app);
 
   SingleTimeCommandBuffer commandBuffer(app);
+
   _createGlobalResources(app, commandBuffer);
   _createForwardPass(app);
   _createDeferredPass(app);
@@ -138,11 +140,13 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
         ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(220, 100), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Debug Options")) {
+    if (ImGui::Begin("Rib Cage")) {
       if (ImGui::CollapsingHeader("Lighting")) {
         ImGui::Text("Exposure:");
         ImGui::SliderFloat("##exposure", &m_exposure, 0.0f, 1.0f);
       }
+
+      m_skeletonEditor.updateUI();
     }
 
     ImGui::End();
@@ -328,6 +332,12 @@ void RibCage::_createGlobalResources(
       m_globalHeap,
       commandBuffer,
       m_globalResources.getGBuffer());
+
+  m_skeletonEditor = SkeletonEditor(
+      app,
+      commandBuffer,
+      m_globalHeap,
+      m_globalResources.getGBuffer());
 }
 
 void RibCage::_createForwardPass(Application& app) {
@@ -510,6 +520,12 @@ void RibCage::draw(
   }
 
   m_debugScene.draw(
+      app,
+      commandBuffer,
+      frame,
+      heapDescriptorSet,
+      m_globalUniforms.getCurrentBindlessHandle(frame));
+  m_skeletonEditor.draw(
       app,
       commandBuffer,
       frame,
