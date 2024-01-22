@@ -98,6 +98,7 @@ public:
 
   void enableGizmo() { m_bEnableGizmo = true; }
   void disableGizmo() { m_bEnableGizmo = false; }
+  bool isGizmoEnabled() const { return m_bEnableGizmo; }
   const glm::vec3& getGizmoPosition() const { return m_gizmoPosition; }
   glm::vec3 getGizmoVertexPosition(int axis) const {
     return m_gizmoPosition + m_gizmoVertices[axis].position;

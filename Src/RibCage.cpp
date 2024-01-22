@@ -53,21 +53,15 @@ void RibCage::initGame(Application& app) {
       (float)windowDims.width / (float)windowDims.height);
   m_pCameraController->setMaxSpeed(15.0f);
 
+  m_orbitCamera = OrbitCamera(
+      glm::vec3(0.0f),
+      5.0f,
+      90.0f,
+      (float)windowDims.width / (float)windowDims.height);
+
   // TODO: need to unbind these at shutdown
   InputManager& input = app.getInputManager();
-  input.addKeyBinding(
-      {GLFW_KEY_L, GLFW_PRESS, 0},
-      [&adjustingExposure = m_adjustingExposure, &input]() {
-        adjustingExposure = true;
-        input.setMouseCursorHidden(false);
-      });
-
-  input.addKeyBinding(
-      {GLFW_KEY_L, GLFW_RELEASE, 0},
-      [&adjustingExposure = m_adjustingExposure, &input]() {
-        adjustingExposure = false;
-        input.setMouseCursorHidden(true);
-      });
+  input.setMouseCursorHidden(false);
 
   // Recreate any stale pipelines (shader hot-reload)
   input.addKeyBinding(
@@ -94,6 +88,8 @@ void RibCage::shutdownGame(Application& app) { m_pCameraController.reset(); }
 void RibCage::createRenderState(Application& app) {
   const VkExtent2D& extent = app.getSwapChainExtent();
   m_pCameraController->getCamera().setAspectRatio(
+      (float)extent.width / (float)extent.height);
+  m_orbitCamera.getCamera().setAspectRatio(
       (float)extent.width / (float)extent.height);
 
   Gui::createRenderState(app);
@@ -131,6 +127,8 @@ void RibCage::destroyRenderState(Application& app) {
   m_debugScene = {};
 }
 
+static int s_cameraMode = 0;
+
 void RibCage::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
@@ -147,6 +145,12 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
       }
 
       m_skeletonEditor.updateUI();
+
+      if (ImGui::CollapsingHeader("Camera")) {
+        static const char* cameraModes[] = {"Orbit", "Free"};
+        ImGui::Text("Modes:");
+        ImGui::Combo("##cameraModes", &s_cameraMode, cameraModes, 2);
+      }
     }
 
     ImGui::End();
@@ -154,16 +158,23 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
     Gui::finishRecordingImgui();
   }
 
-  m_pCameraController->tick(frame.deltaTime);
-  const Camera& camera = m_pCameraController->getCamera();
+  // m_pCameraController->tick(frame.deltaTime);
+  // const Camera& camera = m_pCameraController->getCamera();
 
-  const glm::mat4& projection = camera.getProjection();
+  // const glm::mat4& projection = camera.getProjection();
 
   const InputManager::MousePos& mPos =
       app.getInputManager().getCurrentMousePos();
 
   uint32_t prevInputMask = m_inputMask;
   m_inputMask = app.getInputManager().getCurrentInputMask();
+
+  // TODO: Is this disorienting during translations?
+  if (m_debugScene.isGizmoEnabled())
+    m_orbitCamera.setTargetPosition(m_debugScene.getGizmoPosition());
+
+  m_orbitCamera.tick(frame.deltaTime, prevInputMask, m_inputMask);
+  const Camera& camera = m_orbitCamera.getCamera();
 
   GlobalUniforms globalUniforms;
   globalUniforms.projection = camera.getProjection();

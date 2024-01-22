@@ -27,6 +27,7 @@
 #include <Althea/GlobalHeap.h>
 #include <Althea/GlobalUniforms.h>
 #include <Althea/GlobalResources.h>
+#include <Althea/OrbitCamera.h>
 #include <glm/glm.hpp>
 
 #include <vector>
@@ -60,7 +61,8 @@ private:
   bool m_adjustingExposure = false;
 
   std::unique_ptr<CameraController> m_pCameraController;
-
+  OrbitCamera m_orbitCamera;
+  
   void _createGlobalResources(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer);
