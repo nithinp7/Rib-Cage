@@ -21,7 +21,7 @@ using namespace AltheaEngine;
 
 #define BIT(x) (1 << x)
 namespace RibCage {
-enum SelectionInfoMaskBits : uint32_t { SELECTED = BIT(0) };
+enum SelectionInfoMaskBits : uint32_t { SELECTED = BIT(0), IK_HANDLE = BIT(1) };
 
 struct SelectableVertex {
   alignas(16) glm::vec3 position;

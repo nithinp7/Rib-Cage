@@ -34,6 +34,11 @@ struct JointChildren {
       INVALID_JOINT_IDX};
 };
 
+struct IkHandle {
+  glm::vec3 target; 
+  uint8_t jointIdx;
+};
+
 struct Skeleton {
   glm::mat4 localTransforms[MAX_JOINT_COUNT];
   glm::mat4 worldTransforms[MAX_JOINT_COUNT];
@@ -49,6 +54,8 @@ struct Skeleton {
   void
   recomputeLocalTransforms(const glm::mat4& invParentTransform, uint8_t idx);
   void recomputeLocalTransforms();
+  void solveIk(const std::vector<IkHandle>& ikHandles, uint8_t idx);
+  void solveIk(const std::vector<IkHandle>& ikHandles);
 };
 
 class SkeletonLoader {

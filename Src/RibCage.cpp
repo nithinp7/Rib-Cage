@@ -7,6 +7,7 @@
 #include <Althea/GraphicsPipeline.h>
 #include <Althea/Gui.h>
 #include <Althea/InputManager.h>
+#include <Althea/InputMask.h>
 #include <Althea/ModelViewProjection.h>
 #include <Althea/Primitive.h>
 #include <Althea/SingleTimeCommandBuffer.h>
@@ -169,10 +170,9 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   uint32_t prevInputMask = m_inputMask;
   m_inputMask = app.getInputManager().getCurrentInputMask();
 
-  // TODO: Is this disorienting during translations?
-  if (m_debugScene.isGizmoEnabled())
+  if (m_inputMask & INPUT_BIT_SPACE && m_debugScene.isGizmoEnabled())
     m_orbitCamera.setTargetPosition(m_debugScene.getGizmoPosition());
-
+    
   m_orbitCamera.tick(frame.deltaTime, prevInputMask, m_inputMask);
   const Camera& camera = m_orbitCamera.getCamera();
 

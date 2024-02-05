@@ -49,6 +49,28 @@ void Skeleton::recomputeLocalTransforms() {
     recomputeLocalTransforms(glm::mat4(1.0f), rootJoint);
 }
 
+void Skeleton::solveIk(const std::vector<IkHandle>& ikHandles, uint8_t idx) {
+  glm::vec3 jointPos(worldTransforms[idx][3]);
+  for (uint8_t childIdx : jointChildren[idx].children) {
+    if (childIdx == INVALID_JOINT_IDX)
+      break;
+
+    for (const auto& handle : ikHandles) {
+      if (handle.jointIdx == childIdx) {
+        // Child has an ik handle
+        glm::vec3 childPos(worldTransforms[childIdx][3]);
+        float radius = glm::length(glm::vec3(localTransforms[childIdx][3]));
+
+        break;
+      }
+    }
+  }
+}
+
+void Skeleton::solveIk(const std::vector<IkHandle>& ikHandles) {
+  assert(jointCount > 0);
+}
+
 /*static*/
 bool SkeletonLoader::load(const std::string& path, Skeleton& result) {
   if (!Utilities::checkFileExists(path))
@@ -140,6 +162,23 @@ void SkeletonEditor::updateUI() {
     ImGui::Text("Skeleton Editor Mode:");
     ImGui::Combo("##skeletonEditorMode", &s_editorMode, editorModes, 2);
     ImGui::Separator();
+
+    if (s_editorMode == 0) {
+      static char s_filename[256] = "SkeletonData/Test.skl";
+      if (ImGui::Button("Save Skeleton")) {
+        SkeletonLoader::save(
+            GProjectDirectory + "/" + std::string(s_filename),
+            m_skeleton);
+      }
+
+      if (ImGui::Button("Load Skeleton")) {
+        SkeletonLoader::load(
+            GProjectDirectory + "/" + std::string(s_filename),
+            m_skeleton);
+      }
+
+      ImGui::InputText("##skeletonFilename", s_filename, 256);
+    }
   }
 }
 
@@ -319,12 +358,23 @@ void SkeletonEditor::_updateSkeletonCreator(
         glm::vec3 translation = t * axis;
         glm::vec3 newGizmoPos = gizmoPos + translation;
         scene.setGizmoVertexPosition(newGizmoPos, m_gizmoAxis);
-        for (int idx : scene.getSelection()) {
-          scene.getVertexRef(idx).position += translation;
+        const std::vector<int>& selection = scene.getSelection();
+        if (selection.size() == 1 &&
+            (scene.getVertexRef(selection[0]).infoMask &
+             SelectionInfoMaskBits::IK_HANDLE)) {
+          // Solve from IK handle
+          int idx = selection[0];
+          auto& v = scene.getVertexRef(idx);
+          v.position += translation;
           m_skeleton.worldTransforms[idx][3] += glm::vec4(translation, 0.0f);
+          // m_skeleton.recomputeFromIkHandle(idx);
+        } else {
+          for (int idx : scene.getSelection()) {
+            scene.getVertexRef(idx).position += translation;
+            m_skeleton.worldTransforms[idx][3] += glm::vec4(translation, 0.0f);
+          }
+          m_skeleton.recomputeLocalTransforms();
         }
-
-        m_skeleton.recomputeLocalTransforms();
       } else {
         // Degenerate case, stop dragging to avoid glitches
         m_bDraggingGizmo = false;
@@ -334,6 +384,12 @@ void SkeletonEditor::_updateSkeletonCreator(
     if (m_bDraggingGizmo) {
       m_bDraggingGizmo = false;
     }
+  }
+
+  if (inputMask & INPUT_BIT_K) {
+    // Mark currently selected vertices as ik handles
+    for (int idx : scene.getSelection())
+      scene.getVertexRef(idx).infoMask |= SelectionInfoMaskBits::IK_HANDLE;
   }
 }
 } // namespace RibCage
