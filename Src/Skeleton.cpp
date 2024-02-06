@@ -71,6 +71,59 @@ void Skeleton::solveIk(const std::vector<IkHandle>& ikHandles) {
   assert(jointCount > 0);
 }
 
+void Skeleton::initState(SkeletonState& state) {
+  for (uint8_t jointIdx = 0; jointIdx < this->jointCount; ++jointIdx) {
+    state.prevPositions[jointIdx] = state.positions[jointIdx] =
+        glm::vec3(this->worldTransforms[jointIdx][3]);
+  }
+}
+
+void Skeleton::simStep(float dt, SkeletonState& state) {
+  // apply forces and integrate velocity
+  float gravity = 0.1f;
+  glm::vec3 gravityDt2(0.0f, -gravity * dt * dt, 0.0f);
+  for (uint8_t jointIdx = 0; jointIdx < this->jointCount; ++jointIdx) {
+    glm::vec3 velocityDt =
+        state.positions[jointIdx] - state.prevPositions[jointIdx] + gravityDt2;
+    state.prevPositions[jointIdx] = state.positions[jointIdx];
+    state.positions[jointIdx] += velocityDt;
+  }
+
+  // solve ground constraints
+  for (uint8_t jointIdx = 0; jointIdx < this->jointCount; ++jointIdx) {
+    if (state.positions[jointIdx].y < 0.0f) {
+      state.positions[jointIdx].y = 0.0f;
+    }
+  }
+
+  // solve distance constraints
+  for (uint8_t jointIdx = 0; jointIdx < this->jointCount; ++jointIdx) {
+    for (uint8_t childIdx : jointChildren[jointIdx].children) {
+      if (childIdx == INVALID_JOINT_IDX)
+        break;
+
+      // undeformed distance
+      float radius = glm::length(glm::vec3(localTransforms[childIdx][3]));
+
+      // actual distance
+      glm::vec3 diff = state.positions[jointIdx] - state.positions[childIdx];
+      float dist = glm::length(diff);
+
+      // TODO: Guard div by zero
+      float k = 1.0f;
+      glm::vec3 halfDisp = 0.5f * k * (radius - dist) / dist * diff;
+      state.positions[jointIdx] += halfDisp;
+      state.positions[childIdx] -= halfDisp;
+    }
+  }
+
+  // apply world transforms ??
+  for (uint8_t jointIdx = 0; jointIdx < this->jointCount; ++jointIdx) {
+    this->worldTransforms[jointIdx][3] =
+        glm::vec4(state.positions[jointIdx], 1.0f);
+  }
+}
+
 /*static*/
 bool SkeletonLoader::load(const std::string& path, Skeleton& result) {
   if (!Utilities::checkFileExists(path))
@@ -178,6 +231,12 @@ void SkeletonEditor::updateUI() {
       }
 
       ImGui::InputText("##skeletonFilename", s_filename, 256);
+
+      ImGui::Separator();
+      if (ImGui::Button("Simulate")) {
+        m_skeleton.initState(m_simState);
+        m_bSimulating = true;
+      }
     }
   }
 }
@@ -203,6 +262,11 @@ void SkeletonEditor::draw(
     const FrameContext& frame,
     VkDescriptorSet heapSet,
     UniformHandle globalUniformsHandle) {
+  // TODO: wrong place for this...
+  if (m_bSimulating) {
+    m_skeleton.simStep(1.0f / 30.0f, m_simState);
+  }
+
   m_skeletonUniforms.updateUniforms(m_skeleton, frame);
 
   ActiveRenderPass pass =
@@ -231,6 +295,14 @@ void SkeletonEditor::_updateSkeletonCreator(
     const glm::vec3& cursorDir,
     uint32_t prevInputMask,
     uint32_t inputMask) {
+
+  if (m_bSimulating) {
+    for (uint8_t jointIdx = 0; jointIdx < m_skeleton.jointCount; ++jointIdx) {
+      scene.getVertexRef((int)jointIdx).position =
+          m_simState.positions[jointIdx];
+    }
+  }
+
   bool bLastPressed = prevInputMask & INPUT_BIT_LEFT_MOUSE;
   bool bPressed = inputMask & INPUT_BIT_LEFT_MOUSE;
 

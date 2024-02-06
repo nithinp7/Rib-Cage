@@ -39,6 +39,11 @@ struct IkHandle {
   uint8_t jointIdx;
 };
 
+struct SkeletonState {
+  glm::vec3 prevPositions[MAX_JOINT_COUNT];
+  glm::vec3 positions[MAX_JOINT_COUNT];
+};
+
 struct Skeleton {
   glm::mat4 localTransforms[MAX_JOINT_COUNT];
   glm::mat4 worldTransforms[MAX_JOINT_COUNT];
@@ -56,6 +61,8 @@ struct Skeleton {
   void recomputeLocalTransforms();
   void solveIk(const std::vector<IkHandle>& ikHandles, uint8_t idx);
   void solveIk(const std::vector<IkHandle>& ikHandles);
+  void initState(SkeletonState& state);
+  void simStep(float dt, SkeletonState& state);
 };
 
 class SkeletonLoader {
@@ -118,5 +125,8 @@ private:
   TransientUniforms<Skeleton> m_skeletonUniforms;
   VertexBuffer<glm::vec3> m_cylinderVB;
   IndexBuffer m_cylinderIB;
+
+  SkeletonState m_simState;
+  bool m_bSimulating = false;
 };
 } // namespace RibCage
