@@ -50,13 +50,7 @@ SelectableScene::SelectableScene(
   {
     SubpassBuilder& builder = builders.emplace_back();
 
-    // The GBuffer contains the following color attachments
-    // 1. Position
-    // 2. Normal
-    // 3. Albedo
-    // 4. Metallic-Roughness-Occlusion
-    builder.colorAttachments = {0, 1, 2, 3};
-    builder.depthAttachment = 4;
+    GBufferResources::setupAttachments(builder);
 
     builder.pipelineBuilder
         .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
@@ -75,13 +69,7 @@ SelectableScene::SelectableScene(
   {
     SubpassBuilder& builder = builders.emplace_back();
 
-    // The GBuffer contains the following color attachments
-    // 1. Position
-    // 2. Normal
-    // 3. Albedo
-    // 4. Metallic-Roughness-Occlusion
-    builder.colorAttachments = {0, 1, 2, 3};
-    builder.depthAttachment = 4;
+    GBufferResources::setupAttachments(builder);
 
     builder.pipelineBuilder
         .addVertexInputBinding<glm::vec3>(VK_VERTEX_INPUT_RATE_VERTEX)
@@ -109,7 +97,7 @@ SelectableScene::SelectableScene(
       app,
       m_pass,
       app.getSwapChainExtent(),
-      gBuffer.getAttachmentViews());
+      gBuffer.getAttachmentViewsA());
 }
 
 SceneQueryResult

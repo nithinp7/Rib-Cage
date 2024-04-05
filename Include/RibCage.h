@@ -16,7 +16,6 @@
 #include <Althea/ImageView.h>
 #include <Althea/Model.h>
 #include <Althea/PerFrameResources.h>
-#include <Althea/PointLight.h>
 #include <Althea/RenderPass.h>
 #include <Althea/Sampler.h>
 #include <Althea/ScreenSpaceReflection.h>
@@ -69,7 +68,6 @@ private:
   GlobalHeap m_globalHeap;
   GlobalUniformsResource m_globalUniforms;
   GlobalResources m_globalResources;
-  PointLightCollection m_pointLights;
 
   void _createModels(Application& app, SingleTimeCommandBuffer& commandBuffer);
   std::vector<Model> m_models;

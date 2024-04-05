@@ -30,7 +30,9 @@ layout(push_constant) uniform PushConstants {
 #define irradianceMap RESOURCE(textureHeap, resources.ibl.irradianceMapHandle)
 #define brdfLut RESOURCE(textureHeap, resources.ibl.brdfLutHandle)
 
-#define gBufferPosition RESOURCE(textureHeap, resources.gBuffer.positionHandle)
+#include <Misc/ReconstructPosition.glsl>
+
+#define gBufferDepth RESOURCE(textureHeap, resources.gBuffer.depthAHandle)
 #define gBufferNormal RESOURCE(textureHeap, resources.gBuffer.normalHandle)
 #define gBufferAlbedo RESOURCE(textureHeap, resources.gBuffer.albedoHandle)
 #define gBufferMetallicRoughnessOcclusion RESOURCE(textureHeap, resources.gBuffer.metallicRoughnessOcclusionHandle)
@@ -99,7 +101,9 @@ float computeSSAO(vec2 currentUV, vec3 worldPos, vec3 normal) {
 
       // TODO: Check for invalid position
       
-      vec3 currentPos = textureLod(gBufferPosition, currentUV, 0.0).xyz;
+      float d = textureLod(gBufferDepth, currentUV, 0.0).r;
+      vec3 currentPos = reconstructPosition(currentUV, d);
+
       vec3 dir = currentPos - worldPos;
       float currentProjection = dot(dir, perpRef);
 
@@ -135,8 +139,8 @@ float computeSSAO(vec2 currentUV, vec3 worldPos, vec3 normal) {
 void main() {
   seed = uvec2(gl_FragCoord.xy);
 
-  vec4 position = texture(gBufferPosition, uv).rgba;
-  if (position.a == 0.0) {
+  vec4 baseColor = texture(gBufferAlbedo, uv);
+  if (baseColor.a == 0.0) {
     // Nothing in the GBuffer, draw the environment map
     vec3 envMapSample = sampleEnvMap(direction);
 #ifndef SKIP_TONEMAP
@@ -146,8 +150,9 @@ void main() {
     return;
   }
 
+  float d = texture(gBufferDepth, uv).r;
+  vec3 position = reconstructPosition(uv, d);
   vec3 normal = normalize(texture(gBufferNormal, uv).xyz);
-  vec3 baseColor = texture(gBufferAlbedo, uv).rgb;
   vec3 metallicRoughnessOcclusion = 
       texture(gBufferMetallicRoughnessOcclusion, uv).rgb;
   // metallicRoughnessOcclusion.y *= 0.1;

@@ -37,6 +37,10 @@ struct ForwardPassPushConstants {
   uint32_t globalUniforms;
 };
 
+struct FloorPushConstants {
+  uint32_t globalUniforms;
+};
+
 struct DeferredPassPushConstants {
   uint32_t globalResources;
   uint32_t globalUniforms;
@@ -68,7 +72,6 @@ void RibCage::initGame(Application& app) {
   input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
       [&app, that = this]() {
-        that->m_pointLights.getShadowMapPass().tryRecompile(app);
         that->m_forwardPass.tryRecompile(app);
         that->m_deferredPass.tryRecompile(app);
         that->m_debugScene.tryRecompileShaders(app);
@@ -115,8 +118,6 @@ void RibCage::destroyRenderState(Application& app) {
 
   m_deferredPass = {};
   m_swapChainFrameBuffers = {};
-
-  m_pointLights = {};
 
   m_SSR = {};
   m_globalUniforms = {};
@@ -172,7 +173,7 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
 
   if (m_inputMask & INPUT_BIT_SPACE && m_debugScene.isGizmoEnabled())
     m_orbitCamera.setTargetPosition(m_debugScene.getGizmoPosition());
-    
+
   m_orbitCamera.tick(frame.deltaTime, prevInputMask, m_inputMask);
   const Camera& camera = m_orbitCamera.getCamera();
 
@@ -181,9 +182,8 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   globalUniforms.inverseProjection = glm::inverse(globalUniforms.projection);
   globalUniforms.view = camera.computeView();
   globalUniforms.inverseView = glm::inverse(globalUniforms.view);
-  globalUniforms.lightCount = static_cast<int>(m_pointLights.getCount());
-  globalUniforms.lightBufferHandle =
-      m_pointLights.getCurrentLightBufferHandle(frame).index;
+  globalUniforms.lightCount = 0;
+  globalUniforms.lightBufferHandle = INVALID_BINDLESS_HANDLE;
   globalUniforms.time = static_cast<float>(frame.currentTime);
   globalUniforms.exposure = m_exposure;
   globalUniforms.mouseUV.x =
@@ -297,38 +297,11 @@ void RibCage::_createGlobalResources(
     // m_textureHeap = TextureHeap(m_models);
   }
 
-  // Global resources
-  {
-    m_pointLights = PointLightCollection(
-        app,
-        commandBuffer,
-        m_globalHeap,
-        9,
-        true,
-        m_primitiveConstantsBuffer.getHandle());
-    for (uint32_t i = 0; i < 3; ++i) {
-      for (uint32_t j = 0; j < 3; ++j) {
-        PointLight light;
-        float t = static_cast<float>(i * 3 + j);
-
-        light.position = 40.0f * glm::vec3(
-                                     static_cast<float>(i),
-                                     0.5f,
-                                     (static_cast<float>(j) - 1.5f) * 0.5f);
-        light.emission =
-            1000.0f * // / static_cast<float>(i + 1) *
-            glm::vec3(cos(t) + 1.0f, sin(t + 1.0f) + 1.0f, sin(t) + 1.0f);
-
-        m_pointLights.setLight(i * 3 + j, light);
-      }
-    }
-  }
-
   m_globalResources = GlobalResources(
       app,
       commandBuffer,
       m_globalHeap,
-      m_pointLights.getShadowMapHandle(),
+      {},
       m_primitiveConstantsBuffer.getHandle());
 
   // Set up SSR resources
@@ -357,35 +330,45 @@ void RibCage::_createForwardPass(Application& app) {
   //  FORWARD GLTF PASS
   {
     SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
-    // The GBuffer contains the following color attachments
-    // 1. Position
-    // 2. Normal
-    // 3. Albedo
-    // 4. Metallic-Roughness-Occlusion
-    subpassBuilder.colorAttachments = {0, 1, 2, 3};
-    subpassBuilder.depthAttachment = 4;
+
+    GBufferResources::setupAttachments(subpassBuilder);
 
     Primitive::buildPipeline(subpassBuilder.pipelineBuilder);
-
-    ShaderDefines defs;
-    defs.emplace("BINDLESS_SET", "0");
 
     subpassBuilder
         .pipelineBuilder
         // Vertex shader
-        .addVertexShader(
-            GEngineDirectory + "/Shaders/GltfForwardBindless.vert",
-            defs)
+        .addVertexShader(GEngineDirectory + "/Shaders/GltfForwardBindless.vert")
         // Fragment shader
         .addFragmentShader(
-            GEngineDirectory + "/Shaders/GltfForwardBindless.frag",
-            defs)
+            GEngineDirectory + "/Shaders/GltfForwardBindless.frag")
 
         // Pipeline resource layouts
         .layoutBuilder
         // Global resources (view, projection, environment map)
         .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
         .addPushConstants<ForwardPassPushConstants>(VK_SHADER_STAGE_ALL);
+  }
+
+  // Floor
+  {
+    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
+
+    GBufferResources::setupAttachments(subpassBuilder);
+
+    subpassBuilder
+        .pipelineBuilder
+        // Vertex shader
+        .addVertexShader(GProjectDirectory + "/Shaders/Floor.vert")
+        // Fragment shader
+        .addFragmentShader(
+            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+
+        // Pipeline resource layouts
+        .layoutBuilder
+        // Global resources (view, projection, environment map)
+        .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
+        .addPushConstants<FloorPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
   const GBufferResources& gBuffer = m_globalResources.getGBuffer();
@@ -398,33 +381,21 @@ void RibCage::_createForwardPass(Application& app) {
       std::move(subpassBuilders));
 
   m_forwardFrameBuffer =
-      FrameBuffer(app, m_forwardPass, extent, gBuffer.getAttachmentViews());
+      FrameBuffer(app, m_forwardPass, extent, gBuffer.getAttachmentViewsA());
 }
 
 void RibCage::_createDeferredPass(Application& app) {
   VkClearValue colorClear;
   colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-  VkClearValue depthClear;
-  depthClear.depthStencil = {1.0f, 0};
 
-  std::vector<Attachment> attachments = {
-      Attachment{
-          ATTACHMENT_FLAG_COLOR,
-          app.getSwapChainImageFormat(),
-          colorClear,
-          false, // forPresent is false since the imGUI pass follows the
-                 // deferred pass
-          false,
-          true},
-
-      // Depth buffer
-      Attachment{
-          ATTACHMENT_FLAG_DEPTH,
-          app.getDepthImageFormat(),
-          depthClear,
-          false,
-          true,
-          true}};
+  std::vector<Attachment> attachments = {Attachment{
+      ATTACHMENT_FLAG_COLOR,
+      app.getSwapChainImageFormat(),
+      colorClear,
+      false, // forPresent is false since the imGUI pass follows the
+             // deferred pass
+      false,
+      true}};
 
   std::vector<SubpassBuilder> subpassBuilders;
 
@@ -451,26 +422,14 @@ void RibCage::_createDeferredPass(Application& app) {
         .addPushConstants<DeferredPassPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
-  // SHOW POINT LIGHTS (kinda hacky)
-  // TODO: Really light objects should be rendered in the forward
-  // pass as well and an emissive channel should be added to the
-  // G-Buffer
-  m_pointLights.setupPointLightMeshSubpass(
-      subpassBuilders.emplace_back(),
-      0,
-      1,
-      m_globalHeap.getDescriptorSetLayout());
-
   m_deferredPass = RenderPass(
       app,
       app.getSwapChainExtent(),
       std::move(attachments),
       std::move(subpassBuilders));
 
-  m_swapChainFrameBuffers = SwapChainFrameBufferCollection(
-      app,
-      m_deferredPass,
-      {app.getDepthImageView()});
+  m_swapChainFrameBuffers =
+      SwapChainFrameBufferCollection(app, m_deferredPass, {});
 }
 
 namespace {
@@ -487,19 +446,9 @@ void RibCage::draw(
     VkCommandBuffer commandBuffer,
     const FrameContext& frame) {
 
-  m_pointLights.updateResource(frame);
   m_globalResources.getGBuffer().transitionToAttachment(commandBuffer);
 
   VkDescriptorSet heapDescriptorSet = m_globalHeap.getDescriptorSet();
-
-  // Draw point light shadow maps
-  m_pointLights.drawShadowMaps(
-      app,
-      commandBuffer,
-      frame,
-      m_models,
-      heapDescriptorSet,
-      m_globalResources.getHandle());
 
   // Forward pass
   {
@@ -528,6 +477,15 @@ void RibCage::draw(
             primitive.getIndexBuffer());
       }
     }
+
+    pass.nextSubpass();
+    pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
+    pass.getDrawContext().bindDescriptorSets();
+    pass.getDrawContext().updatePushConstants(
+        FloorPushConstants{
+            m_globalUniforms.getCurrentBindlessHandle(frame).index},
+        0);
+    pass.getDrawContext().draw(6);
   }
 
   m_debugScene.draw(
@@ -579,12 +537,6 @@ void RibCage::draw(
       context.bindDescriptorSets();
       context.draw(3);
     }
-
-    pass.nextSubpass();
-    pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
-    m_pointLights.draw(
-        pass.getDrawContext(),
-        m_globalUniforms.getCurrentBindlessHandle(frame));
   }
 
   Gui::draw(app, frame, commandBuffer);
