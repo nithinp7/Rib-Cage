@@ -2,6 +2,7 @@
 
 #include "Skeleton.h"
 #include "DebugTools.h"
+#include "ClothSim.h"
 
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
@@ -86,6 +87,8 @@ private:
 
   SkeletonEditor m_skeletonEditor;
   SelectableScene m_debugScene;
+
+  ClothSim m_clothSim;
 
   uint32_t m_inputMask = 0;
 };

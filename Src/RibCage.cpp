@@ -127,6 +127,7 @@ void RibCage::destroyRenderState(Application& app) {
 
   m_skeletonEditor = {};
   m_debugScene = {};
+  m_clothSim = {};
 }
 
 static int s_cameraMode = 0;
@@ -322,6 +323,12 @@ void RibCage::_createGlobalResources(
       commandBuffer,
       m_globalHeap,
       m_globalResources.getGBuffer());
+
+  m_clothSim = ClothSim(
+      app,
+      commandBuffer,
+      m_globalResources.getGBuffer(),
+      m_globalHeap);
 }
 
 void RibCage::_createForwardPass(Application& app) {
@@ -499,6 +506,13 @@ void RibCage::draw(
       commandBuffer,
       frame,
       heapDescriptorSet,
+      m_globalUniforms.getCurrentBindlessHandle(frame));
+  m_clothSim.draw(
+      app,
+      commandBuffer,
+      frame,
+      heapDescriptorSet,
+      m_globalResources.getHandle(),
       m_globalUniforms.getCurrentBindlessHandle(frame));
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
