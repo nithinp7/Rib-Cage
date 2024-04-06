@@ -14,9 +14,9 @@ UNIFORM_BUFFER(_clothUniforms, ClothUniforms{
   uint globalUniforms;
 
   float deltaTime;
-  uint PADDING;
   
   uint nodes;
+  uint nodePositions;
   uint nodesCount;
 
   uint distanceConstraints;
@@ -36,6 +36,11 @@ BUFFER_RW(_nodes, NodesHeap{
   Node nodes[];
 });
 #define getNode(nodeIdx) _nodes[clothUniforms.nodes].nodes[nodeIdx]
+
+BUFFER_RW(_nodePositions, NodePositionsHeap{
+  vec4 verts[];
+});
+#define getNodePosition(nodeIdx) _nodePositions[clothUniforms.nodePositions].verts[nodeIdx]
 
 struct DistanceConstraint {
   uint a;

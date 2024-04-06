@@ -4,6 +4,7 @@
 #include <Althea/BufferHeap.h>
 #include <Althea/ComputePipeline.h>
 #include <Althea/DeferredRendering.h>
+#include <Althea/DynamicVertexBuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/IndexBuffer.h>
 #include <Althea/RenderPass.h>
@@ -23,9 +24,9 @@ struct ClothUniforms {
   uint32_t globalUniforms;
 
   float deltaTime;
-  uint32_t PADDING;
 
   uint32_t nodes;
+  uint32_t nodePositions;
   uint32_t nodesCount;
 
   uint32_t distanceConstraints;
@@ -38,7 +39,7 @@ struct ClothSection {
 
 struct Node {
   alignas(16) glm::vec3 position;
-  alignas(8) uint32_t objectIdx;
+  alignas(4) uint32_t objectIdx;
 };
 
 struct DistanceConstraint {
@@ -78,6 +79,7 @@ private:
   // TODO: These probably need to become paged heaps
   StructuredBuffer<Node> m_nodes;
   StructuredBuffer<DistanceConstraint> m_distanceConstraints;
+  DynamicVertexBuffer<glm::vec4> m_nodePositions;
 
   std::vector<ClothSection> m_clothSections;
 };

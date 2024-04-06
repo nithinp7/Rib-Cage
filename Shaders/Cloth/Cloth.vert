@@ -11,8 +11,8 @@ layout(location=3) out vec3 outMetallicRoughnessOcclusion;
 void main() {
   Node node = getNode(gl_VertexIndex);
   
-  outPosition = node.position;
-  outNormal = vec3(1.0, 0.0, 0.0); // TODO...
+  outPosition = getNodePosition(gl_VertexIndex).xyz;
+  outNormal = vec3(0.0); // Will fallback to screen-space normals
   
   uvec2 colorSeed = uvec2(gl_VertexIndex, gl_VertexIndex+1);
   // uvec2 colorSeed = uvec2(node.objectIdx, node.objectIdx+1);

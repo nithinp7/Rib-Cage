@@ -64,6 +64,9 @@ ClothSim::ClothSim(
     m_distanceConstraints =
         StructuredBuffer<DistanceConstraint>(app, MAX_DISTANCE_CONSTRAINTS);
     m_distanceConstraints.registerToHeap(heap);
+
+    m_nodePositions = DynamicVertexBuffer<glm::vec4>(app, MAX_NODES, true);
+    m_nodePositions.registerToHeap(heap);
   }
 
   // Set up cloth section
@@ -74,10 +77,13 @@ ClothSim::ClothSim(
     for (uint32_t i = 0; i < width; ++i) {
       for (uint32_t j = 0; j < width; ++j) {
         uint32_t flatIdx = i * width + j;
+        glm::vec3 position = glm::vec3(i * cellSize, 0.0f, j * cellSize);
+
         Node node{};
-        node.position = glm::vec3(i * cellSize, 0.0f, j * cellSize);
+        node.position = position; // TODO: Remove...
         node.objectIdx = flatIdx / 12;
         m_nodes.setElement(node, flatIdx);
+        m_nodePositions.setVertex(glm::vec4(position, 1.0f), flatIdx);
       }
     }
     m_nodes.upload(app, commandBuffer);
@@ -108,7 +114,11 @@ ClothSim::ClothSim(
   }
 }
 
-void ClothSim::update(const FrameContext& frame) {}
+void ClothSim::update(const FrameContext& frame) {
+  // TODO: Sim solver step
+
+  m_nodePositions.upload(frame.frameRingBufferIndex);
+}
 
 void ClothSim::draw(
     const Application& app,
@@ -127,6 +137,7 @@ void ClothSim::draw(
     uniforms.deltaTime = frame.deltaTime;
 
     uniforms.nodes = m_nodes.getHandle().index;
+    uniforms.nodePositions = m_nodePositions.getCurrentBufferHandle(frame.frameRingBufferIndex).index;
     uniforms.nodesCount = MAX_NODES;
 
     uniforms.distanceConstraints = m_distanceConstraints.getHandle().index;
