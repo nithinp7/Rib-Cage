@@ -37,8 +37,8 @@ BUFFER_RW(_nodes, NodesHeap{
 });
 #define getNode(nodeIdx) _nodes[clothUniforms.nodes].nodes[nodeIdx]
 
-BUFFER_RW(_nodePositions, NodePositionsHeap{
-  vec4 verts[];
+BUFFER_RW_PACKED(_nodePositions, NodePositionsHeap{
+  vec3 verts[];
 });
 #define getNodePosition(nodeIdx) _nodePositions[clothUniforms.nodePositions].verts[nodeIdx]
 

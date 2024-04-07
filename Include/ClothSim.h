@@ -58,6 +58,8 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap);
 
+void tryRecompileShaders(Application& app);
+
 void update(const FrameContext& frame);
 
 void draw(
@@ -79,7 +81,8 @@ private:
   // TODO: These probably need to become paged heaps
   StructuredBuffer<Node> m_nodes;
   StructuredBuffer<DistanceConstraint> m_distanceConstraints;
-  DynamicVertexBuffer<glm::vec4> m_nodePositions;
+  std::vector<glm::vec3> m_prevPositions;
+  DynamicVertexBuffer<glm::vec3> m_nodePositions;
 
   std::vector<ClothSection> m_clothSections;
 };

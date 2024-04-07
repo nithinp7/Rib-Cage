@@ -76,6 +76,7 @@ void RibCage::initGame(Application& app) {
         that->m_deferredPass.tryRecompile(app);
         that->m_debugScene.tryRecompileShaders(app);
         that->m_skeletonEditor.tryRecompileShaders(app);
+        that->m_clothSim.tryRecompileShaders(app);
       });
 
   input.addMousePositionCallback(
@@ -152,7 +153,12 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
       if (ImGui::CollapsingHeader("Camera")) {
         static const char* cameraModes[] = {"Orbit", "Free"};
         ImGui::Text("Modes:");
-        ImGui::Combo("##cameraModes", &s_cameraMode, cameraModes, 2);
+        if (ImGui::Combo("##cameraModes", &s_cameraMode, cameraModes, 2)) {
+          // if (s_cameraMode == 0) {
+          //   const glm::mat4& freeCamTransform = m_pCameraController->getCamera().getTransform();
+          //   m_orbitCamera.
+          // }
+        }
       }
     }
 
@@ -196,22 +202,6 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   m_globalUniforms.getCurrentUniformBuffer(frame).updateUniforms(
       globalUniforms);
 
-  // for (uint32_t i = 0; i < m_pointLights.getCount(); ++i) {
-  //   PointLight light = m_pointLights.getLight(i);
-
-  //   light.position = 40.0f * glm::vec3(
-  //                                static_cast<float>(i / 3),
-  //                                -0.1f,
-  //                                (static_cast<float>(i % 3) - 1.5f) * 0.5f);
-
-  //   light.position.x += 5.5f * cos(1.5f * frame.currentTime + i);
-  //   light.position.z += 5.5f * sin(1.5 * frame.currentTime + i);
-
-  //   m_pointLights.setLight(i, light);
-  // }
-
-  // m_pointLights.updateResource(frame);
-
   glm::vec2 mouseNdc = 2.0f * globalUniforms.mouseUV - glm::vec2(1.0f);
   glm::vec4 scrPosWorld = globalUniforms.inverseView *
                           globalUniforms.inverseProjection *
@@ -222,6 +212,7 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   m_skeletonEditor
       .update(m_debugScene, camPos, cursorDir, prevInputMask, m_inputMask);
   m_debugScene.update(frame);
+  m_clothSim.update(frame);
 }
 
 void RibCage::_createModels(
