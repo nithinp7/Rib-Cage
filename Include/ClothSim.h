@@ -70,6 +70,7 @@ void draw(
     BufferHandle globalResourcesHandle,
     UniformHandle globalUniformsHandle);
 
+void updateUI();
 private:
   TransientUniforms<ClothUniforms> m_uniforms;
 

@@ -1,6 +1,7 @@
 #include "ClothSim.h"
 
 #include <Althea/DeferredRendering.h>
+#include <Althea/Gui.h>
 
 using namespace AltheaEngine;
 
@@ -152,15 +153,18 @@ void ClothSim::tryRecompileShaders(Application& app) {
     computePass.tryRecompile(app);
 }
 
+static int s_solverSubsteps = 1;
+static float s_damping = 0.0f;
+static float s_k = 1.0f;
+static float s_gravity = 1.0f;
+
 void ClothSim::update(const FrameContext& frame) {
   // TODO: Sim solver step
   float dt = 1.0f / 30.0f;
-  float k = 1.0f;
 
   // TODO: time substeps
   // Apply gravity
-  float damping = 0.0f;
-  glm::vec3 gravity(0.0f, -1.0f, 0.0f);
+  glm::vec3 gravity(0.0f, -s_gravity, 0.0f);
   for (uint32_t nodeIdx = 0; nodeIdx < m_nodePositions.getVertexCount();
        ++nodeIdx) {
     glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
@@ -168,11 +172,10 @@ void ClothSim::update(const FrameContext& frame) {
 
     m_prevPositions[nodeIdx] = pos;
 
-    pos += 0.5f * gravity * dt * dt + velDt * (1.0f - damping);
+    pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
   }
 
-  uint32_t solverSubsteps = 1;
-  for (uint32_t solverStep = 0; solverStep < solverSubsteps; ++solverStep) {
+  for (uint32_t solverStep = 0; solverStep < s_solverSubsteps; ++solverStep) {
     // TODO: Not actually the right number of dist constraints...
     for (uint32_t constraintIdx = 0;
          constraintIdx < m_distanceConstraints.getCount();
@@ -189,13 +192,15 @@ void ClothSim::update(const FrameContext& frame) {
       if (dist < 0.001f)
         diff = glm::vec3(1.0f, 0.0f, 0.0f);
 
-      glm::vec3 disp = 0.5f * k * (c.restLength - dist) * diff;
+      glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
       p0 -= disp;
       p1 += disp;
     }
 
     for (uint32_t nodeIdx = 0; nodeIdx < 10; ++nodeIdx) {
-      m_nodePositions.getVertex(nodeIdx) = m_prevPositions[nodeIdx];
+      glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+      glm::vec3 diff = m_prevPositions[nodeIdx] - pos;
+      pos += s_k * diff;
     }
   }
 
@@ -246,6 +251,21 @@ void ClothSim::draw(
       pass.getDrawContext().bindIndexBuffer(section.indices);
       pass.getDrawContext().drawIndexed(section.indices.getIndexCount());
     }
+  }
+}
+
+void ClothSim::updateUI() {
+  if (ImGui::CollapsingHeader(
+          "Cloth Sim",
+          ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Substeps:");
+    ImGui::SliderInt("##substeps", &s_solverSubsteps, 1, 8);
+    ImGui::Text("Damping:");
+    ImGui::SliderFloat("##damping", &s_damping, 0.0f, 1.0f);
+    ImGui::Text("K:");
+    ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
+    ImGui::Text("Gravity:");
+    ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
   }
 }
 } // namespace RibCage

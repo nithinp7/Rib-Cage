@@ -203,8 +203,8 @@ SkeletonEditor::SkeletonEditor(
 
 void SkeletonEditor::updateUI() {
   if (ImGui::CollapsingHeader(
-          "Skeleton Editor",
-          ImGuiTreeNodeFlags_DefaultOpen)) {
+          "Skeleton Editor"/*,
+          ImGuiTreeNodeFlags_DefaultOpen*/)) {
     static const char* editorModes[] = {"Skeleton Creator", "IK Creator"};
     ImGui::Text("Skeleton Editor Mode:");
     ImGui::Combo("##skeletonEditorMode", &s_editorMode, editorModes, 2);

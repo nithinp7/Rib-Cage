@@ -136,33 +136,47 @@ static int s_cameraMode = 0;
 void RibCage::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
-    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(
-        ImVec2(main_viewport->WorkPos.x + 650, main_viewport->WorkPos.y + 20),
-        ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(220, 100), ImGuiCond_FirstUseEver);
+    
+    if (!app.getInputManager().getMouseCursorHidden()) {
+      const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+      ImGui::SetNextWindowPos(
+          ImVec2(main_viewport->WorkPos.x + 650, main_viewport->WorkPos.y + 20),
+          ImGuiCond_FirstUseEver);
+      ImGui::SetNextWindowSize(ImVec2(220, 100), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Rib Cage")) {
-      if (ImGui::CollapsingHeader("Lighting")) {
-        ImGui::Text("Exposure:");
-        ImGui::SliderFloat("##exposure", &m_exposure, 0.0f, 1.0f);
-      }
+      if (ImGui::Begin("Rib Cage")) {
+        // m_skeletonEditor.updateUI();
+        m_clothSim.updateUI();
 
-      m_skeletonEditor.updateUI();
+        if (ImGui::CollapsingHeader("Camera")) {
+          static const char* cameraModes[] = {"Orbit", "Free"};
+          ImGui::Text("Modes:");
+          if (ImGui::Combo("##cameraModes", &s_cameraMode, cameraModes, 2)) {
+            if (s_cameraMode == 0) {
+              const Camera& freeCam = m_pCameraController->getCamera();
+              const glm::mat4& freeCamTransform = freeCam.getTransform();
+              m_orbitCamera.setTargetPosition(
+                  glm::vec3(freeCamTransform[3]) +
+                  m_orbitCamera.getSpacing() * glm::vec3(freeCamTransform[2]));
 
-      if (ImGui::CollapsingHeader("Camera")) {
-        static const char* cameraModes[] = {"Orbit", "Free"};
-        ImGui::Text("Modes:");
-        if (ImGui::Combo("##cameraModes", &s_cameraMode, cameraModes, 2)) {
-          // if (s_cameraMode == 0) {
-          //   const glm::mat4& freeCamTransform = m_pCameraController->getCamera().getTransform();
-          //   m_orbitCamera.
-          // }
+              m_orbitCamera.setRotation(
+                  freeCam.computeYaw(),
+                  freeCam.computePitch());
+            } else {
+              const Camera& orbitCam = m_orbitCamera.getCamera();
+              const glm::mat4& orbitCamTransform = orbitCam.getTransform();
+              m_pCameraController->getCamera().setPosition(
+                  glm::vec3(orbitCamTransform[3]));
+              m_pCameraController->getCamera().setRotationRadians(
+                  orbitCam.computeYaw(),
+                  orbitCam.computePitch());
+            }
+          }
         }
       }
-    }
 
-    ImGui::End();
+      ImGui::End();
+    }
 
     Gui::finishRecordingImgui();
   }
@@ -181,8 +195,13 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   if (m_inputMask & INPUT_BIT_SPACE && m_debugScene.isGizmoEnabled())
     m_orbitCamera.setTargetPosition(m_debugScene.getGizmoPosition());
 
-  m_orbitCamera.tick(frame.deltaTime, prevInputMask, m_inputMask);
-  const Camera& camera = m_orbitCamera.getCamera();
+  if (s_cameraMode == 0)
+    m_orbitCamera.tick(frame.deltaTime, prevInputMask, m_inputMask);
+  else
+    m_pCameraController->tick(frame.deltaTime);
+
+  const Camera& camera = s_cameraMode == 0 ? m_orbitCamera.getCamera()
+                                           : m_pCameraController->getCamera();
 
   GlobalUniforms globalUniforms;
   globalUniforms.projection = camera.getProjection();
