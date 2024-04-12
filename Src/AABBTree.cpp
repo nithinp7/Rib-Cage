@@ -11,7 +11,10 @@ namespace RibCage {
 
 namespace {
 struct PushConstants {
-  uint32_t aabb;
+  uint32_t globalResources;
+  uint32_t globalUniforms;
+  uint32_t clothUniforms;
+  AABBHandles handles;
 };
 
 // From Mathias Muller
@@ -21,14 +24,34 @@ uint32_t hashGridCell(int32_t x, int32_t y, int32_t z) {
 
 } // namespace
 
-AABBTree::AABBTree(
-    const std::vector<uint32_t>& tris,
-    const std::vector<glm::vec3>& verts,
-    float padding) {
-  uint32_t triCount = tris.size() / 3;
+AABBTree::AABBTree(Application& app, GlobalHeap& heap, uint32_t leafCount) {
+  m_innerNodesBuffer =
+      DynamicVertexBuffer<AABBInnerNode>(app, leafCount, false);
+  m_leavesBuffer = DynamicVertexBuffer<AABBLeaf>(app, leafCount, false);
+}
 
+void AABBTree::upload(uint32_t ringBufferIndex) {
+  m_innerNodesBuffer.updateVertices(ringBufferIndex, m_innerNodes);
+  m_leavesBuffer.updateVertices(ringBufferIndex, m_leaves);
+}
+
+AABBHandles AABBTree::getHandles(uint32_t ringBufferIndex) const {
+  return AABBHandles{
+      m_innerNodesBuffer.getCurrentBufferHandle(ringBufferIndex).index,
+      m_leavesBuffer.getCurrentBufferHandle(ringBufferIndex).index};
+}
+
+void AABBTree::refitTriangles(
+    const StridedView<uint32_t>& tris,
+    const StridedView<glm::vec3>& verts,
+    float padding) {
+  // TODO: Need to verify that the tri count has not changed
+  uint32_t triCount = tris.getCount() / 3;
+
+  m_leaves.clear();
   m_leaves.reserve(triCount);
   // TODO: re-evaluate required sizes of inner nodes
+  m_innerNodes.clear();
   m_innerNodes.reserve(triCount);
 
   glm::vec3 treeMin(std::numeric_limits<float>::max());
@@ -40,11 +63,11 @@ AABBTree::AABBTree(
     const glm::vec3& v1 = verts[tris[3 * i + 1]];
     const glm::vec3& v2 = verts[tris[3 * i + 2]];
 
-    Leaf& leaf = m_leaves.emplace_back();
+    AABBLeaf& leaf = m_leaves.emplace_back();
     leaf.min = glm::min(glm::min(v0, v1), v2) - glm::vec3(padding);
     leaf.max = glm::max(glm::max(v0, v1), v2) + glm::vec3(padding);
     leaf.triIdx = i;
-
+    
     treeMin = glm::min(treeMin, leaf.min);
     treeMax = glm::max(treeMax, leaf.max);
   }
@@ -62,11 +85,12 @@ void AABBTree::populateInnerNode(
     const glm::vec3& min,
     const glm::vec3& max,
     gsl::span<uint32_t> sortedLeaves) {
-  InnerNode& node = m_innerNodes.emplace_back();
+  AABBInnerNode& node = m_innerNodes.emplace_back();
   node.min = min;
   node.max = max;
   node.childA = ~0;
   node.childB = ~0;
+  node.flags = 0;
 
   if (sortedLeaves.size() <= 2) {
     if (sortedLeaves.size() > 0)
@@ -74,9 +98,10 @@ void AABBTree::populateInnerNode(
     if (sortedLeaves.size() > 1)
       node.childB = sortedLeaves[1];
 
+    node.flags |= InnerNodeFlag_HasLeafChildren;
     return;
   }
-  
+
   // split largest axis
   uint32_t midpointIdx = sortedLeaves.size() / 2;
 
@@ -134,13 +159,16 @@ void AABBTree::populateInnerNode(
   }
 
   populateInnerNode(minA, maxA, gsl::span(&sortedLeaves[0], midpointIdx));
-  populateInnerNode(minB, maxB, gsl::span(&sortedLeaves[midpointIdx], sortedLeaves.size() - midpointIdx));
+  populateInnerNode(
+      minB,
+      maxB,
+      gsl::span(&sortedLeaves[midpointIdx], sortedLeaves.size() - midpointIdx));
 }
 
 AABBManager::AABBManager(
     Application& app,
     const GBufferResources& gBuffer,
-    VkDescriptorSetLayout heapLayout) {
+    GlobalHeap& heap) {
   std::vector<SubpassBuilder> builders;
   {
     SubpassBuilder& builder = builders.emplace_back();
@@ -151,7 +179,7 @@ AABBManager::AABBManager(
         .addVertexShader(GProjectDirectory + "/Shaders/Cloth/ClothAABB.vert")
         .addFragmentShader(
             GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
-        .layoutBuilder.addDescriptorSet(heapLayout)
+        .layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
         .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
   }
 
@@ -167,6 +195,10 @@ AABBManager::AABBManager(
       m_dbgRenderPass,
       app.getSwapChainExtent(),
       gBuffer.getAttachmentViewsA());
+}
+
+void AABBManager::update(const FrameContext& frame) {
+  
 }
 
 } // namespace RibCage
