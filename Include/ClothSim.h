@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AABBTree.h"
+
 #include <Althea/Application.h>
 #include <Althea/BufferHeap.h>
 #include <Althea/ComputePipeline.h>
@@ -86,5 +88,7 @@ private:
   DynamicVertexBuffer<glm::vec3> m_nodePositions;
 
   std::vector<ClothSection> m_clothSections;
+
+  AABBManager m_aabb;
 };
 } // namespace RibCage

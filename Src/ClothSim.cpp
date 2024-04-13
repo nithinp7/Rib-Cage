@@ -145,18 +145,29 @@ ClothSim::ClothSim(
     section.indices =
         IndexBuffer(app, (VkCommandBuffer)commandBuffer, std::move(indices));
   }
+
+  // Setup AABB
+  m_aabb = AABBManager(
+      app,
+      gBuffer,
+      heap,
+      m_clothSections[0].indices.getIndexCount() / 3);
 }
 
 void ClothSim::tryRecompileShaders(Application& app) {
   m_renderPass.tryRecompile(app);
   for (ComputePipeline& computePass : m_solvePasses)
     computePass.tryRecompile(app);
+
+  m_aabb.tryRecompile(app);
 }
 
 static int s_solverSubsteps = 1;
 static float s_damping = 0.0f;
 static float s_k = 1.0f;
 static float s_gravity = 1.0f;
+
+static bool s_showAABB = true;
 
 void ClothSim::update(const FrameContext& frame) {
   // TODO: Sim solver step
@@ -205,6 +216,15 @@ void ClothSim::update(const FrameContext& frame) {
   }
 
   m_nodePositions.upload(frame.frameRingBufferIndex);
+
+  // Fix-up AABB
+  {
+    const std::vector<uint32_t>& indices =
+        m_clothSections[0].indices.getIndices();
+    const std::vector<glm::vec3>& vertices = m_nodePositions.getVertices();
+
+    m_aabb.update(indices, vertices, frame);
+  }
 }
 
 void ClothSim::draw(
@@ -252,12 +272,20 @@ void ClothSim::draw(
       pass.getDrawContext().drawIndexed(section.indices.getIndexCount());
     }
   }
+
+  if (s_showAABB) {
+    m_aabb.debugDraw(
+        app,
+        commandBuffer,
+        frame,
+        heapSet,
+        globalResourcesHandle,
+        globalUniformsHandle);
+  }
 }
 
 void ClothSim::updateUI() {
-  if (ImGui::CollapsingHeader(
-          "Cloth Sim",
-          ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Cloth Sim", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Substeps:");
     ImGui::SliderInt("##substeps", &s_solverSubsteps, 1, 8);
     ImGui::Text("Damping:");
@@ -266,6 +294,10 @@ void ClothSim::updateUI() {
     ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
     ImGui::Text("Gravity:");
     ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
+
+    ImGui::Separator();
+    ImGui::Text("Show AABB");
+    ImGui::Checkbox("##showaabb", &s_showAABB);
   }
 }
 } // namespace RibCage

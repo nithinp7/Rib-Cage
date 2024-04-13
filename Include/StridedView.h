@@ -14,6 +14,12 @@ struct StridedView {
     , m_stride(sizeof(_TStruct))
     , m_count(count) {}
 
+  StridedView(const std::vector<_TView>& vec)
+    : m_pStart(reinterpret_cast<const std::byte*>(vec.data()))
+    , m_offset(0)
+    , m_stride(sizeof(_TView))
+    , m_count(vec.size()) {}
+
   const _TView& operator[](size_t idx) const {
     const std::byte* ptr = m_pStart + m_offset + idx * m_stride;
     return *reinterpret_cast<const _TView*>(ptr);

@@ -10,13 +10,6 @@ using namespace AltheaEngine;
 namespace RibCage {
 
 namespace {
-struct PushConstants {
-  uint32_t globalResources;
-  uint32_t globalUniforms;
-  uint32_t clothUniforms;
-  AABBHandles handles;
-};
-
 // From Mathias Muller
 uint32_t hashGridCell(int32_t x, int32_t y, int32_t z) {
   return uint32_t(glm::abs((x * 92837111) ^ (y * 689287499) ^ (z * 283923481)));
@@ -25,8 +18,9 @@ uint32_t hashGridCell(int32_t x, int32_t y, int32_t z) {
 } // namespace
 
 AABBTree::AABBTree(Application& app, GlobalHeap& heap, uint32_t leafCount) {
+  // TODO: Pre-sizing inner nodes?
   m_innerNodesBuffer =
-      DynamicVertexBuffer<AABBInnerNode>(app, leafCount, false);
+      DynamicVertexBuffer<AABBInnerNode>(app, 3 * leafCount, false);
   m_leavesBuffer = DynamicVertexBuffer<AABBLeaf>(app, leafCount, false);
 }
 
@@ -52,7 +46,7 @@ void AABBTree::refitTriangles(
   m_leaves.reserve(triCount);
   // TODO: re-evaluate required sizes of inner nodes
   m_innerNodes.clear();
-  m_innerNodes.reserve(triCount);
+  m_innerNodes.reserve(3 * triCount);
 
   glm::vec3 treeMin(std::numeric_limits<float>::max());
   glm::vec3 treeMax(std::numeric_limits<float>::lowest());
@@ -67,7 +61,7 @@ void AABBTree::refitTriangles(
     leaf.min = glm::min(glm::min(v0, v1), v2) - glm::vec3(padding);
     leaf.max = glm::max(glm::max(v0, v1), v2) + glm::vec3(padding);
     leaf.triIdx = i;
-    
+
     treeMin = glm::min(treeMin, leaf.min);
     treeMax = glm::max(treeMax, leaf.max);
   }
@@ -168,22 +162,28 @@ void AABBTree::populateInnerNode(
 AABBManager::AABBManager(
     Application& app,
     const GBufferResources& gBuffer,
-    GlobalHeap& heap) {
+    GlobalHeap& heap,
+    uint32_t leafCount) {
   std::vector<SubpassBuilder> builders;
   {
     SubpassBuilder& builder = builders.emplace_back();
 
     GBufferResources::setupAttachments(builder);
 
-    builder.pipelineBuilder.setPrimitiveType(PrimitiveType::LINES)
-        .addVertexShader(GProjectDirectory + "/Shaders/Cloth/ClothAABB.vert")
+    builder.pipelineBuilder
+        .setPrimitiveType(PrimitiveType::LINES)
+        .setLineWidth(5.0f)
+        .addVertexShader(GProjectDirectory + "/Shaders/BVH/AABBWireframe.vert")
         .addFragmentShader(
             GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
         .layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
-        .addPushConstants<PushConstants>(VK_SHADER_STAGE_ALL);
+        .addPushConstants<AABBPushConstants>(VK_SHADER_STAGE_ALL);
   }
 
   std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
+  for (auto& attachment : attachments)
+    attachment.load = true;
+
   m_dbgRenderPass = RenderPass(
       app,
       app.getSwapChainExtent(),
@@ -195,10 +195,41 @@ AABBManager::AABBManager(
       m_dbgRenderPass,
       app.getSwapChainExtent(),
       gBuffer.getAttachmentViewsA());
+
+  m_tree = AABBTree(app, heap, leafCount);
 }
 
-void AABBManager::update(const FrameContext& frame) {
-  
+void AABBManager::update(
+    const StridedView<uint32_t>& tris,
+    const StridedView<glm::vec3>& verts,
+    const FrameContext& frame) {
+  // TODO: Add padding, add swept prims, etc
+  m_tree.refitTriangles(tris, verts, 0.0f);
+  m_tree.upload(frame.frameRingBufferIndex);
+  // TODO: ImGui
+}
+
+void AABBManager::debugDraw(
+    const Application& app,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame,
+    VkDescriptorSet heapSet,
+    BufferHandle globalResources,
+    UniformHandle globalUniforms) const {
+
+  AABBPushConstants push{};
+  push.globalResources = globalResources.index;
+  push.globalUniforms = globalUniforms.index;
+  push.handles = m_tree.getHandles(frame.frameRingBufferIndex);
+
+  {
+    ActiveRenderPass pass =
+        m_dbgRenderPass.begin(app, commandBuffer, frame, m_dbgFrameBuffer);
+    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
+    pass.getDrawContext().bindDescriptorSets();
+    pass.getDrawContext().updatePushConstants(push, 0);
+    pass.getDrawContext().drawIndexed(24, m_tree.getLeafCount());
+  }
 }
 
 } // namespace RibCage

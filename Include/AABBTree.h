@@ -3,10 +3,11 @@
 #include "StridedView.h"
 
 #include <Althea/Application.h>
+#include <Althea/BindlessHandle.h>
 #include <Althea/DeferredRendering.h>
 #include <Althea/DynamicVertexBuffer.h>
-#include <Althea/Framebuffer.h>
 #include <Althea/FrameContext.h>
+#include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/RenderPass.h>
 #include <glm/glm.hpp>
@@ -41,6 +42,12 @@ struct AABBHandles {
   uint32_t leaves;
 };
 
+struct AABBPushConstants {
+  uint32_t globalResources;
+  uint32_t globalUniforms;
+  AABBHandles handles;
+};
+
 class AABBTree {
 public:
   AABBTree() = default;
@@ -54,6 +61,9 @@ public:
       const StridedView<uint32_t>& tris,
       const StridedView<glm::vec3>& verts,
       float padding);
+
+  uint32_t getInnerNodeCount() const { return m_innerNodes.size(); }
+  uint32_t getLeafCount() const { return m_leaves.size(); }
 
 private:
   void populateInnerNode(
@@ -70,13 +80,29 @@ private:
 
 class AABBManager {
 public:
+  AABBManager() = default;
   AABBManager(
       Application& app,
       const GBufferResources& gBuffer,
-      GlobalHeap& heap);
+      GlobalHeap& heap,
+      uint32_t leafCount);
 
-  void update(const FrameContext& frame);
-  
+  // TODO: Generalize?
+  void update(
+      const StridedView<uint32_t>& tris,
+      const StridedView<glm::vec3>& verts,
+      const FrameContext& frame);
+
+  void debugDraw(
+      const Application& app,
+      VkCommandBuffer commandBuffer,
+      const FrameContext& frame,
+      VkDescriptorSet heapSet,
+      BufferHandle globalResources,
+      UniformHandle globalUniforms) const;
+
+  void tryRecompile(Application& app) { m_dbgRenderPass.tryRecompile(app); }
+
 private:
   AABBTree m_tree;
 
