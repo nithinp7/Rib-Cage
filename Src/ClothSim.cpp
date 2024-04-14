@@ -162,6 +162,7 @@ void ClothSim::tryRecompileShaders(Application& app) {
   m_aabb.tryRecompile(app);
 }
 
+static bool s_simPaused = false;
 static int s_solverSubsteps = 1;
 static float s_damping = 0.0f;
 static float s_k = 1.0f;
@@ -170,48 +171,50 @@ static float s_gravity = 1.0f;
 static bool s_showAABB = true;
 
 void ClothSim::update(const FrameContext& frame) {
-  // TODO: Sim solver step
-  float dt = 1.0f / 30.0f;
+  if (!s_simPaused) {
+    // TODO: Sim solver step
+    float dt = 1.0f / 30.0f;
 
-  // TODO: time substeps
-  // Apply gravity
-  glm::vec3 gravity(0.0f, -s_gravity, 0.0f);
-  for (uint32_t nodeIdx = 0; nodeIdx < m_nodePositions.getVertexCount();
-       ++nodeIdx) {
-    glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-    glm::vec3 velDt = pos - m_prevPositions[nodeIdx];
+    // TODO: time substeps
+    // Apply gravity
+    glm::vec3 gravity(0.0f, -s_gravity, 0.0f);
+    for (uint32_t nodeIdx = 0; nodeIdx < m_nodePositions.getVertexCount();
+         ++nodeIdx) {
+      glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+      glm::vec3 velDt = pos - m_prevPositions[nodeIdx];
 
-    m_prevPositions[nodeIdx] = pos;
+      m_prevPositions[nodeIdx] = pos;
 
-    pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
-  }
-
-  for (uint32_t solverStep = 0; solverStep < s_solverSubsteps; ++solverStep) {
-    // TODO: Not actually the right number of dist constraints...
-    for (uint32_t constraintIdx = 0;
-         constraintIdx < m_distanceConstraints.getCount();
-         ++constraintIdx) {
-      const DistanceConstraint& c =
-          m_distanceConstraints.getElement(constraintIdx);
-      glm::vec3& p0 = m_nodePositions.getVertex(c.a);
-      glm::vec3& p1 = m_nodePositions.getVertex(c.b);
-
-      glm::vec3 diff = p1 - p0;
-      float dist = glm::length(diff);
-      diff /= dist;
-
-      if (dist < 0.001f)
-        diff = glm::vec3(1.0f, 0.0f, 0.0f);
-
-      glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
-      p0 -= disp;
-      p1 += disp;
+      pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
     }
 
-    for (uint32_t nodeIdx = 0; nodeIdx < 10; ++nodeIdx) {
-      glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-      glm::vec3 diff = m_prevPositions[nodeIdx] - pos;
-      pos += s_k * diff;
+    for (uint32_t solverStep = 0; solverStep < s_solverSubsteps; ++solverStep) {
+      // TODO: Not actually the right number of dist constraints...
+      for (uint32_t constraintIdx = 0;
+           constraintIdx < m_distanceConstraints.getCount();
+           ++constraintIdx) {
+        const DistanceConstraint& c =
+            m_distanceConstraints.getElement(constraintIdx);
+        glm::vec3& p0 = m_nodePositions.getVertex(c.a);
+        glm::vec3& p1 = m_nodePositions.getVertex(c.b);
+
+        glm::vec3 diff = p1 - p0;
+        float dist = glm::length(diff);
+        diff /= dist;
+
+        if (dist < 0.001f)
+          diff = glm::vec3(1.0f, 0.0f, 0.0f);
+
+        glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
+        p0 -= disp;
+        p1 += disp;
+      }
+
+      for (uint32_t nodeIdx = 0; nodeIdx < 10; ++nodeIdx) {
+        glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+        glm::vec3 diff = m_prevPositions[nodeIdx] - pos;
+        pos += s_k * diff;
+      }
     }
   }
 
@@ -286,6 +289,10 @@ void ClothSim::draw(
 
 void ClothSim::updateUI() {
   if (ImGui::CollapsingHeader("Cloth Sim", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Paused:");
+    ImGui::Checkbox("##paused", &s_simPaused);
+
+    ImGui::Separator();
     ImGui::Text("Substeps:");
     ImGui::SliderInt("##substeps", &s_solverSubsteps, 1, 8);
     ImGui::Text("Damping:");
@@ -294,10 +301,8 @@ void ClothSim::updateUI() {
     ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
     ImGui::Text("Gravity:");
     ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
-
-    ImGui::Separator();
-    ImGui::Text("Show AABB");
-    ImGui::Checkbox("##showaabb", &s_showAABB);
   }
+
+  m_aabb.updateUI();
 }
 } // namespace RibCage

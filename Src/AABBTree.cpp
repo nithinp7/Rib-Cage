@@ -1,5 +1,6 @@
 #include "AABBTree.h"
 
+#include <Althea/Gui.h>
 #include <gsl/span>
 
 #include <algorithm>
@@ -21,7 +22,10 @@ AABBTree::AABBTree(Application& app, GlobalHeap& heap, uint32_t leafCount) {
   // TODO: Pre-sizing inner nodes?
   m_innerNodesBuffer =
       DynamicVertexBuffer<AABBInnerNode>(app, 3 * leafCount, false);
+  m_innerNodesBuffer.registerToHeap(heap);
+
   m_leavesBuffer = DynamicVertexBuffer<AABBLeaf>(app, leafCount, false);
+  m_leavesBuffer.registerToHeap(heap);
 }
 
 void AABBTree::upload(uint32_t ringBufferIndex) {
@@ -170,8 +174,7 @@ AABBManager::AABBManager(
 
     GBufferResources::setupAttachments(builder);
 
-    builder.pipelineBuilder
-        .setPrimitiveType(PrimitiveType::LINES)
+    builder.pipelineBuilder.setPrimitiveType(PrimitiveType::LINES)
         .setLineWidth(5.0f)
         .addVertexShader(GProjectDirectory + "/Shaders/BVH/AABBWireframe.vert")
         .addFragmentShader(
@@ -199,6 +202,9 @@ AABBManager::AABBManager(
   m_tree = AABBTree(app, heap, leafCount);
 }
 
+static bool s_showAABBLeaves = true;
+static bool s_showAABBInnerNodes = true;
+
 void AABBManager::update(
     const StridedView<uint32_t>& tris,
     const StridedView<glm::vec3>& verts,
@@ -206,7 +212,15 @@ void AABBManager::update(
   // TODO: Add padding, add swept prims, etc
   m_tree.refitTriangles(tris, verts, 0.0f);
   m_tree.upload(frame.frameRingBufferIndex);
-  // TODO: ImGui
+}
+
+void AABBManager::updateUI() {
+  if (ImGui::CollapsingHeader("BVH", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Show AABB Leaves:");
+    ImGui::Checkbox("##showleaves", &s_showAABBLeaves);
+    ImGui::Text("Show AABB Inner Nodes:");
+    ImGui::Checkbox("##showinnernodes", &s_showAABBInnerNodes);
+  }
 }
 
 void AABBManager::debugDraw(
@@ -227,8 +241,18 @@ void AABBManager::debugDraw(
         m_dbgRenderPass.begin(app, commandBuffer, frame, m_dbgFrameBuffer);
     pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
     pass.getDrawContext().bindDescriptorSets();
-    pass.getDrawContext().updatePushConstants(push, 0);
-    pass.getDrawContext().drawIndexed(24, m_tree.getLeafCount());
+
+    if (s_showAABBLeaves) {
+      push.flags = 0; // leaf nodes
+      pass.getDrawContext().updatePushConstants(push, 0);
+      pass.getDrawContext().draw(24, m_tree.getLeafCount());
+    }
+
+    if (s_showAABBInnerNodes) {
+      push.flags = 1; // inner nodes
+      pass.getDrawContext().updatePushConstants(push, 0);
+      pass.getDrawContext().draw(24, m_tree.getInnerNodeCount());
+    }
   }
 }
 

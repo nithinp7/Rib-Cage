@@ -10,9 +10,10 @@ struct AABBHandles {
   uint leaves;
 };
 layout(push_constant) uniform PushConstant {
+  AABBHandles handles;  
   uint globalResources;
   uint globalUniforms;
-  AABBHandles handles;  
+  uint flags;
 } push;
 
 #define resources globalResources[push.globalResources]

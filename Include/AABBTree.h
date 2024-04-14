@@ -43,9 +43,10 @@ struct AABBHandles {
 };
 
 struct AABBPushConstants {
+  AABBHandles handles;
   uint32_t globalResources;
   uint32_t globalUniforms;
-  AABBHandles handles;
+  uint32_t flags;
 };
 
 class AABBTree {
@@ -92,6 +93,7 @@ public:
       const StridedView<uint32_t>& tris,
       const StridedView<glm::vec3>& verts,
       const FrameContext& frame);
+  void updateUI();
 
   void debugDraw(
       const Application& app,
