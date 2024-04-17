@@ -1,7 +1,5 @@
 #pragma once
 
-#include "StridedView.h"
-
 #include <Althea/Application.h>
 #include <Althea/BindlessHandle.h>
 #include <Althea/DeferredRendering.h>
@@ -10,6 +8,7 @@
 #include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/RenderPass.h>
+#include <Althea/StridedView.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
@@ -28,6 +27,8 @@ struct AABBInnerNode {
   alignas(4) uint32_t childB;
   uint32_t flags;
   uint32_t padding;
+
+  bool intersect(const glm::vec3& minB, const glm::vec3& maxB) const;
 };
 
 struct AABBLeaf {
@@ -35,6 +36,8 @@ struct AABBLeaf {
   alignas(4) uint32_t triIdx;
   alignas(16) glm::vec3 max;
   alignas(4) uint32_t padding;
+  
+  bool intersect(const glm::vec3& minB, const glm::vec3& maxB) const;
 };
 
 struct AABBHandles {
@@ -66,11 +69,20 @@ public:
   uint32_t getInnerNodeCount() const { return m_innerNodes.size(); }
   uint32_t getLeafCount() const { return m_leaves.size(); }
 
+  // Tree accessors
+  const AABBInnerNode* getRoot() const;
+  const AABBInnerNode* getChildA(const AABBInnerNode* pNode) const; 
+  const AABBInnerNode* getChildB(const AABBInnerNode* pNode) const; 
+  bool isTerminalNode(const AABBInnerNode* pNode) const;
+  const AABBLeaf* getLeafA(const AABBInnerNode* pNode) const; 
+  const AABBLeaf* getLeafB(const AABBInnerNode* pNode) const; 
+  const AABBInnerNode* getInnerNode(uint32_t nodeIdx) const;
+  const AABBLeaf* getLeaf(uint32_t leafIdx) const;
+  bool hasChildA(const AABBInnerNode* pNode) const;
+  bool hasChildA(const AABBInnerNode* pNode) const;
+
 private:
-  void populateInnerNode(
-      const glm::vec3& min,
-      const glm::vec3& max,
-      gsl::span<uint32_t> sortedLeaves);
+  void populateInnerNode(gsl::span<uint32_t> sortedLeaves);
 
   std::vector<AABBInnerNode> m_innerNodes;
   DynamicVertexBuffer<AABBInnerNode> m_innerNodesBuffer;
@@ -87,6 +99,8 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap,
       uint32_t leafCount);
+
+  const AABBTree& getTree() const { return m_tree; }
 
   // TODO: Generalize?
   void update(

@@ -2,6 +2,7 @@
 
 #include <Althea/DeferredRendering.h>
 #include <Althea/Gui.h>
+#include <glm/gtc/constants.hpp>
 
 using namespace AltheaEngine;
 
@@ -168,7 +169,9 @@ static float s_damping = 0.0f;
 static float s_k = 1.0f;
 static float s_gravity = 1.0f;
 
-static bool s_showAABB = true;
+static bool s_fixTop = true;
+static bool s_fixBottom = true;
+static float s_twist = 0.0f;
 
 void ClothSim::update(const FrameContext& frame) {
   if (!s_simPaused) {
@@ -210,10 +213,33 @@ void ClothSim::update(const FrameContext& frame) {
         p1 += disp;
       }
 
-      for (uint32_t nodeIdx = 0; nodeIdx < 10; ++nodeIdx) {
-        glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-        glm::vec3 diff = m_prevPositions[nodeIdx] - pos;
-        pos += s_k * diff;
+      uint32_t width = 10;
+      float cellSize = 1.0f;
+      // Fixed top row
+      if (s_fixTop) {
+        for (uint32_t nodeIdx = 0; nodeIdx < width; ++nodeIdx) {
+          glm::vec3 target(nodeIdx * cellSize, 0.0f, 0.0f);
+          glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+          glm::vec3 diff = target - pos;
+          pos += s_k * diff;
+        }
+      }
+
+      // Fixed bottom row
+      if (s_fixBottom) {
+        glm::vec3 targetCenter(0.5f * width * cellSize, 0.0f, (width - 1) * cellSize);
+        float theta = s_twist * 2.0f * glm::pi<float>();
+        float cosTheta = glm::cos(theta);
+        float sinTheta = glm::sin(theta);
+
+        for (uint32_t i = 0; i < width; ++i) {
+          uint32_t nodeIdx = width * (width - 1) + i;
+          float x = i * cellSize - 0.5f * width;
+          glm::vec3 target = targetCenter + glm::vec3(cosTheta * x, sinTheta * x, 0.0f);
+          glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+          glm::vec3 diff = target - pos;
+          pos += s_k * diff;
+        }
       }
     }
   }
@@ -276,15 +302,13 @@ void ClothSim::draw(
     }
   }
 
-  if (s_showAABB) {
-    m_aabb.debugDraw(
-        app,
-        commandBuffer,
-        frame,
-        heapSet,
-        globalResourcesHandle,
-        globalUniformsHandle);
-  }
+  m_aabb.debugDraw(
+      app,
+      commandBuffer,
+      frame,
+      heapSet,
+      globalResourcesHandle,
+      globalUniformsHandle);
 }
 
 void ClothSim::updateUI() {
@@ -301,6 +325,14 @@ void ClothSim::updateUI() {
     ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
     ImGui::Text("Gravity:");
     ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
+
+    ImGui::Separator();
+    ImGui::Text("Fix Sheet Top:");
+    ImGui::Checkbox("##fixtop", &s_fixTop);
+    ImGui::Text("Fix Sheet Bottom:");
+    ImGui::Checkbox("##fixbottom", &s_fixBottom);
+    ImGui::Text("Twist Percentage:");
+    ImGui::SliderFloat("##twistamt", &s_twist, 0.0f, 1.0f);
   }
 
   m_aabb.updateUI();

@@ -9,14 +9,61 @@
 using namespace AltheaEngine;
 
 namespace RibCage {
+// TODO: Rename to KDTree??
 
-namespace {
-// From Mathias Muller
-uint32_t hashGridCell(int32_t x, int32_t y, int32_t z) {
-  return uint32_t(glm::abs((x * 92837111) ^ (y * 689287499) ^ (z * 283923481)));
+const AABBInnerNode* AABBTree::getRoot() const { return &m_innerNodes[0]; }
+const AABBInnerNode* AABBTree::getChildA(const AABBInnerNode* pNode) const {
+  return &m_innerNodes[pNode->childA];
+}
+const AABBInnerNode* AABBTree::getChildB(const AABBInnerNode* pNode) const {
+  return &m_innerNodes[pNode->childB];
+}
+bool AABBTree::isTerminalNode(const AABBInnerNode* pNode) const {
+  return bool(pNode->flags & InnerNodeFlag_HasLeafChildren);
+}
+const AABBLeaf* AABBTree::getLeafA(const AABBInnerNode* pNode) const {
+  return &m_leaves[pNode->childA];
+}
+const AABBLeaf* AABBTree::getLeafB(const AABBInnerNode* pNode) const {
+  return &m_leaves[pNode->childB];
+}
+const AABBInnerNode* AABBTree::getInnerNode(uint32_t nodeIdx) const {
+  return &m_innerNodes[nodeIdx];
+}
+const AABBLeaf* AABBTree::getLeaf(uint32_t leafIdx) const {
+  return &m_leaves[leafIdx];
 }
 
-} // namespace
+// TODO: Some sort of SSE way to do this via glm?
+static bool intersect(float minA, float maxA, float minB, float maxB) {
+  minA <= minB && maxA >= minB;
+  minA >= minB && maxA <= maxB;
+
+  if (minA <= minB) {
+    return maxA >= minB;
+  } else {
+    return minA <= maxB;
+  }
+}
+
+static bool intersect(
+    const glm::vec3& minA,
+    const glm::vec3& maxA,
+    const glm::vec3& minB,
+    const glm::vec3& maxB) {
+  return 
+    intersect(minA.x, maxA.x, minB.x, maxB.x) &&
+    intersect(minA.y, maxA.y, minB.y, maxB.y) &&
+    intersect(minA.z, maxA.z, minB.z, maxB.z);
+}
+
+bool AABBInnerNode::intersect(const glm::vec3& minB, const glm::vec3& maxB) const {
+  return RibCage::intersect(min, max, minB, maxB);
+}
+
+bool AABBLeaf::intersect(const glm::vec3& minB, const glm::vec3& maxB) const {
+  return RibCage::intersect(min, max, minB, maxB);
+}
 
 AABBTree::AABBTree(Application& app, GlobalHeap& heap, uint32_t leafCount) {
   // TODO: Pre-sizing inner nodes?
@@ -52,9 +99,6 @@ void AABBTree::refitTriangles(
   m_innerNodes.clear();
   m_innerNodes.reserve(3 * triCount);
 
-  glm::vec3 treeMin(std::numeric_limits<float>::max());
-  glm::vec3 treeMax(std::numeric_limits<float>::lowest());
-
   // create leaf nodes
   for (uint32_t i = 0; i < triCount; ++i) {
     const glm::vec3& v0 = verts[tris[3 * i]];
@@ -65,9 +109,6 @@ void AABBTree::refitTriangles(
     leaf.min = glm::min(glm::min(v0, v1), v2) - glm::vec3(padding);
     leaf.max = glm::max(glm::max(v0, v1), v2) + glm::vec3(padding);
     leaf.triIdx = i;
-
-    treeMin = glm::min(treeMin, leaf.min);
-    treeMax = glm::max(treeMax, leaf.max);
   }
 
   uint32_t* pSortedLeaves =
@@ -76,16 +117,20 @@ void AABBTree::refitTriangles(
   for (uint32_t i = 0; i < triCount; ++i)
     sortedLeaves[i] = i;
 
-  populateInnerNode(treeMin, treeMax, sortedLeaves);
+  populateInnerNode(sortedLeaves);
 }
 
-void AABBTree::populateInnerNode(
-    const glm::vec3& min,
-    const glm::vec3& max,
-    gsl::span<uint32_t> sortedLeaves) {
+void AABBTree::populateInnerNode(gsl::span<uint32_t> sortedLeaves) {
   AABBInnerNode& node = m_innerNodes.emplace_back();
-  node.min = min;
-  node.max = max;
+
+  node.min = glm::vec3(std::numeric_limits<float>::max());
+  node.max = glm::vec3(std::numeric_limits<float>::lowest());
+  for (uint32_t leafIdx : sortedLeaves) {
+    const AABBLeaf& leaf = m_leaves[leafIdx];
+    node.min = glm::min(node.min, leaf.min);
+    node.max = glm::max(node.max, leaf.max);
+  }
+
   node.childA = ~0;
   node.childB = ~0;
   node.flags = 0;
@@ -116,50 +161,34 @@ void AABBTree::populateInnerNode(
   auto midpointIt = beginIt + midpointIdx;
   auto endIt = sortedLeaves.end();
 
-  glm::vec3 minA, minB, maxA, maxB;
-  minA = minB = node.min;
-  maxA = maxB = node.max;
-
   // TODO: Is comparing box mins sufficient?
   auto cmpX = [&](uint32_t i0, uint32_t i1) -> bool {
-    // float c0 = 0.5f * m_nodes[i0].m_min.x + 0.5f * m_nodes[i0].m_max.x;
-    // float c1 = 0.5f * m_nodes[i1].m_min.x + 0.5f * m_nodes[i1].m_max.x;
     return m_leaves[i0].min.x < m_leaves[i1].min.x;
   };
 
   auto cmpY = [&](uint32_t i0, uint32_t i1) -> bool {
-    // float c0 = 0.5f * m_nodes[i0].m_min.y + 0.5f * m_nodes[i0].m_max.y;
-    // float c1 = 0.5f * m_nodes[i1].m_min.y + 0.5f * m_nodes[i1].m_max.y;
     return m_leaves[i0].min.y < m_leaves[i1].min.y;
   };
 
   auto cmpZ = [&](uint32_t i0, uint32_t i1) -> bool {
-    // float c0 = 0.5f * m_nodes[i0].m_min.z + 0.5f * m_nodes[i0].m_max.z;
-    // float c1 = 0.5f * m_nodes[i1].m_min.z + 0.5f * m_nodes[i1].m_max.z;
     return m_leaves[i0].min.z < m_leaves[i1].min.z;
   };
 
+  // TODO: Does nth_element at the midpoint guarantee the lower
+  // half is less than / eq to upper half?
   if (axis == 0) {
     std::nth_element(beginIt, midpointIt, endIt, cmpX);
-    uint32_t pivotIdx = *midpointIt;
-    float pivot = m_leaves[pivotIdx].min.x;
-    maxA.x = minB.x = pivot;
   } else if (axis == 1) {
     std::nth_element(beginIt, midpointIt, endIt, cmpY);
-    uint32_t pivotIdx = *midpointIt;
-    float pivot = m_leaves[pivotIdx].min.y;
-    maxA.y = minB.y = pivot;
   } else {
     std::nth_element(beginIt, midpointIt, endIt, cmpZ);
-    uint32_t pivotIdx = *midpointIt;
-    float pivot = m_leaves[pivotIdx].min.z;
-    maxA.z = minB.z = pivot;
   }
 
-  populateInnerNode(minA, maxA, gsl::span(&sortedLeaves[0], midpointIdx));
+  // Child A is unnecessary to mark down in a depth-first ordering...
+  node.childA = m_innerNodes.size();
+  populateInnerNode(gsl::span(&sortedLeaves[0], midpointIdx));
+  node.childB = m_innerNodes.size();
   populateInnerNode(
-      minB,
-      maxB,
       gsl::span(&sortedLeaves[midpointIdx], sortedLeaves.size() - midpointIdx));
 }
 
@@ -204,18 +233,21 @@ AABBManager::AABBManager(
 
 static bool s_showAABBLeaves = true;
 static bool s_showAABBInnerNodes = true;
+static float s_padding = 0.0f;
 
 void AABBManager::update(
     const StridedView<uint32_t>& tris,
     const StridedView<glm::vec3>& verts,
     const FrameContext& frame) {
   // TODO: Add padding, add swept prims, etc
-  m_tree.refitTriangles(tris, verts, 0.0f);
+  m_tree.refitTriangles(tris, verts, s_padding);
   m_tree.upload(frame.frameRingBufferIndex);
 }
 
 void AABBManager::updateUI() {
   if (ImGui::CollapsingHeader("BVH", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Padding:");
+    ImGui::SliderFloat("##padding", &s_padding, 0.0f, 2.5f);
     ImGui::Text("Show AABB Leaves:");
     ImGui::Checkbox("##showleaves", &s_showAABBLeaves);
     ImGui::Text("Show AABB Inner Nodes:");

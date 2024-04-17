@@ -131,7 +131,7 @@ void RibCage::destroyRenderState(Application& app) {
   m_clothSim = {};
 }
 
-static int s_cameraMode = 0;
+static int s_cameraMode = 1;
 
 void RibCage::tick(Application& app, const FrameContext& frame) {
   {
