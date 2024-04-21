@@ -8,7 +8,7 @@
 #include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/RenderPass.h>
-#include <Althea/StridedView.h>
+#include <Althea/Containers/StridedView.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
@@ -63,7 +63,8 @@ public:
 
   void refitTriangles(
       const StridedView<uint32_t>& tris,
-      const StridedView<glm::vec3>& verts,
+      const StridedView<glm::vec3>& positions,
+      const StridedView<glm::vec3>& prevPositions,
       float padding);
 
   uint32_t getInnerNodeCount() const { return m_innerNodes.size(); }
@@ -79,7 +80,7 @@ public:
   const AABBInnerNode* getInnerNode(uint32_t nodeIdx) const;
   const AABBLeaf* getLeaf(uint32_t leafIdx) const;
   bool hasChildA(const AABBInnerNode* pNode) const;
-  bool hasChildA(const AABBInnerNode* pNode) const;
+  bool hasChildB(const AABBInnerNode* pNode) const;
 
 private:
   void populateInnerNode(gsl::span<uint32_t> sortedLeaves);
@@ -105,7 +106,8 @@ public:
   // TODO: Generalize?
   void update(
       const StridedView<uint32_t>& tris,
-      const StridedView<glm::vec3>& verts,
+      const StridedView<glm::vec3>& positions,
+      const StridedView<glm::vec3>& prevPositions,
       const FrameContext& frame);
   void updateUI();
 

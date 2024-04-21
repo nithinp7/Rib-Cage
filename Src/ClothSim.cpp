@@ -250,9 +250,9 @@ void ClothSim::update(const FrameContext& frame) {
   {
     const std::vector<uint32_t>& indices =
         m_clothSections[0].indices.getIndices();
-    const std::vector<glm::vec3>& vertices = m_nodePositions.getVertices();
+    const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
-    m_aabb.update(indices, vertices, frame);
+    m_aabb.update(indices, positions, m_prevPositions, frame);
   }
 }
 

@@ -39,12 +39,16 @@ void main() {
   outPosition[axis1] = bool(axisLineIdx & 1) ? min[axis1] : max[axis1];
   outPosition[axis2] = bool(axisLineIdx & 2) ? min[axis2] : max[axis2];
 
-  outNormal = -globals.view[3].xyz; // Will fallback to screen-space normals
+  // ray to camera
+  vec3 diffToCam = outPosition - globals.view[3].xyz;
+  // take rejection against line axis
+  diffToCam[axis0] = 0.0f; 
+  outNormal = -normalize(diffToCam); 
   
   // uvec2 colorSeed = uvec2(gl_InstanceIndex, gl_InstanceIndex+1);
   // outColor = randVec3(colorSeed);
 
-  outMetallicRoughnessOcclusion = vec3(0.0, 0.3, 1.0);
+  outMetallicRoughnessOcclusion = vec3(0.0, 1.0, 1.0);
 
   gl_Position = globals.projection * globals.view * vec4(outPosition, 1.0);
 }

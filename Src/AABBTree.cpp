@@ -33,6 +33,12 @@ const AABBInnerNode* AABBTree::getInnerNode(uint32_t nodeIdx) const {
 const AABBLeaf* AABBTree::getLeaf(uint32_t leafIdx) const {
   return &m_leaves[leafIdx];
 }
+bool AABBTree::hasChildA(const AABBInnerNode* pNode) const {
+  return pNode->childA != ~0u;
+}
+bool AABBTree::hasChildB(const AABBInnerNode* pNode) const {
+  return pNode->childB != ~0u;
+}
 
 // TODO: Some sort of SSE way to do this via glm?
 static bool intersect(float minA, float maxA, float minB, float maxB) {
@@ -88,7 +94,8 @@ AABBHandles AABBTree::getHandles(uint32_t ringBufferIndex) const {
 
 void AABBTree::refitTriangles(
     const StridedView<uint32_t>& tris,
-    const StridedView<glm::vec3>& verts,
+    const StridedView<glm::vec3>& positions,
+    const StridedView<glm::vec3>& prevPositions,
     float padding) {
   // TODO: Need to verify that the tri count has not changed
   uint32_t triCount = tris.getCount() / 3;
@@ -101,13 +108,20 @@ void AABBTree::refitTriangles(
 
   // create leaf nodes
   for (uint32_t i = 0; i < triCount; ++i) {
-    const glm::vec3& v0 = verts[tris[3 * i]];
-    const glm::vec3& v1 = verts[tris[3 * i + 1]];
-    const glm::vec3& v2 = verts[tris[3 * i + 2]];
 
     AABBLeaf& leaf = m_leaves.emplace_back();
-    leaf.min = glm::min(glm::min(v0, v1), v2) - glm::vec3(padding);
-    leaf.max = glm::max(glm::max(v0, v1), v2) + glm::vec3(padding);
+    leaf.min = glm::vec3(std::numeric_limits<float>::max());
+    leaf.max = glm::vec3(std::numeric_limits<float>::lowest()); 
+    for (uint32_t j = 0; j < 3; ++j) {
+      const glm::vec3& p0 = positions[tris[3 * i + j]];
+      const glm::vec3& p1 = prevPositions[tris[3 * i + j]];
+      leaf.min = glm::min(glm::min(p0, p1), leaf.min);
+      leaf.max = glm::max(glm::max(p0, p1), leaf.max);
+    }
+
+    leaf.min -= glm::vec3(padding);
+    leaf.max += glm::vec3(padding);
+    
     leaf.triIdx = i;
   }
 
@@ -204,7 +218,7 @@ AABBManager::AABBManager(
     GBufferResources::setupAttachments(builder);
 
     builder.pipelineBuilder.setPrimitiveType(PrimitiveType::LINES)
-        .setLineWidth(5.0f)
+        .setLineWidth(2.0f)
         .addVertexShader(GProjectDirectory + "/Shaders/BVH/AABBWireframe.vert")
         .addFragmentShader(
             GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
@@ -237,10 +251,11 @@ static float s_padding = 0.0f;
 
 void AABBManager::update(
     const StridedView<uint32_t>& tris,
-    const StridedView<glm::vec3>& verts,
+    const StridedView<glm::vec3>& positions,
+    const StridedView<glm::vec3>& prevPositions,
     const FrameContext& frame) {
   // TODO: Add padding, add swept prims, etc
-  m_tree.refitTriangles(tris, verts, s_padding);
+  m_tree.refitTriangles(tris, positions, prevPositions, s_padding);
   m_tree.upload(frame.frameRingBufferIndex);
 }
 
