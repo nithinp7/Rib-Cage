@@ -245,8 +245,8 @@ AABBManager::AABBManager(
   m_tree = AABBTree(app, heap, leafCount);
 }
 
-static bool s_showAABBLeaves = true;
-static bool s_showAABBInnerNodes = true;
+static bool s_showAABBLeaves = false;
+static bool s_showAABBInnerNodes = false;
 static float s_padding = 0.0f;
 
 void AABBManager::update(
@@ -260,7 +260,7 @@ void AABBManager::update(
 }
 
 void AABBManager::updateUI() {
-  if (ImGui::CollapsingHeader("BVH", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("BVH")) {
     ImGui::Text("Padding:");
     ImGui::SliderFloat("##padding", &s_padding, 0.0f, 2.5f);
     ImGui::Text("Show AABB Leaves:");

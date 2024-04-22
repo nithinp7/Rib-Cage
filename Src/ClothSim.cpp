@@ -154,7 +154,7 @@ ClothSim::ClothSim(
       heap,
       m_clothSections[0].indices.getIndexCount() / 3);
 
-  m_collisions = CollisionsManager(app, gBuffer, heap);
+  m_collisions = CollisionsManager(app, commandBuffer, gBuffer, heap);
 }
 
 void ClothSim::tryRecompileShaders(Application& app) {
@@ -255,7 +255,7 @@ void ClothSim::update(const FrameContext& frame) {
     const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
     m_aabb.update(indices, positions, m_prevPositions, frame);
-    m_collisions.update(indices, positions, m_prevPositions, m_aabb.getTree());
+    m_collisions.update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
   }
 }
 
@@ -312,6 +312,8 @@ void ClothSim::draw(
       heapSet,
       globalResourcesHandle,
       globalUniformsHandle);
+
+  m_collisions.draw(app, commandBuffer, frame, heapSet, globalUniformsHandle);
 }
 
 void ClothSim::updateUI() {

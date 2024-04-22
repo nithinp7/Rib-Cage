@@ -142,26 +142,62 @@ Collisions::Collisions(
 
 CollisionsManager::CollisionsManager(
     Application& app,
+    VkCommandBuffer commandBuffer,
     const GBufferResources& gBuffer,
     GlobalHeap& heap) {
-
+  m_scene = SelectableScene(app, heap, commandBuffer, gBuffer);
 }
 
-float s_thresholdDistance = 0.01f;
+float s_thresholdDistance = 0.1f;
+bool s_bVisualizeCollisions = true;
 
 void CollisionsManager::updateUI() {
   if (ImGui::CollapsingHeader("Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Threshold Distance:");
-    ImGui::SliderFloat("##thresholddistance", &s_thresholdDistance, 0.01f, 0.1f);
+    ImGui::SliderFloat(
+        "##thresholddistance",
+        &s_thresholdDistance,
+        0.01f,
+        0.5f);
+
+    ImGui::Separator();
+    ImGui::Text("Visualize Collisions:");
+    ImGui::Checkbox("##visualizecollisions", &s_bVisualizeCollisions);
   }
 }
 
 void CollisionsManager::update(
-      const StridedView<uint32_t>& indices,
-      const StridedView<glm::vec3>& positions,
-      const StridedView<glm::vec3>& prevPositions,
-      const AABBTree& aabb) {
-  m_collisions = Collisions(indices, positions, prevPositions, s_thresholdDistance, aabb);
+    const FrameContext& frame,
+    const StridedView<uint32_t>& indices,
+    const StridedView<glm::vec3>& positions,
+    const StridedView<glm::vec3>& prevPositions,
+    const AABBTree& aabb) {
+  m_collisions =
+      Collisions(indices, positions, prevPositions, s_thresholdDistance, aabb);
+
+  if (s_bVisualizeCollisions) {
+    m_scene.clear();
+    for (const CollisionConstraint& c : m_collisions.getCollisions()) {
+      for (uint32_t i = 0; i < 3; ++i) {
+        const glm::vec3& p0 = positions[indices[3 * c.primA + i]];
+        const glm::vec3& p1 = positions[indices[3 * c.primB + i]];
+        m_scene.addVertex(p0);
+        m_scene.addVertex(p1);
+      }
+    }
+    m_scene.update(frame);
+  }
+}
+
+void CollisionsManager::draw(
+    const Application& app,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame,
+    VkDescriptorSet heapSet,
+    UniformHandle globalUniformsHandle) {
+  if (s_bVisualizeCollisions) {
+    m_scene.draw(app, commandBuffer, frame, heapSet, globalUniformsHandle, 0.25);
+  }
 }
 
 } // namespace RibCage

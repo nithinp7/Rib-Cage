@@ -48,6 +48,8 @@ public:
       VkCommandBuffer commandBuffer,
       const GBufferResources& gBuffer);
 
+  void clear() { m_currentVertCount = 0; }
+  
   int addVertex(const glm::vec3& pos) {
     if (m_currentVertCount == MAX_SELECTABLE_VERTS_COUNT)
       return -1;
@@ -92,7 +94,8 @@ public:
       VkCommandBuffer commandBuffer,
       const FrameContext& frame,
       VkDescriptorSet heapSet,
-      UniformHandle globalUniformsHandle);
+      UniformHandle globalUniformsHandle,
+      float scaleMultiplier = 1.0f);
 
   void tryRecompileShaders(Application& app) { m_pass.tryRecompile(app); }
 

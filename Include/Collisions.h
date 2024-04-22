@@ -1,10 +1,15 @@
 #pragma once
 
 #include "AABBTree.h"
+#include "DebugTools.h"
 
 #include <Althea/Application.h>
+#include <Althea/FrameContext.h>
 #include <Althea/Containers/StridedView.h>
+#include <Althea/BindlessHandle.h>
 #include <glm/glm.hpp>
+
+#include <vulkan/vulkan.h>
 
 #include <cstdint>
 
@@ -40,17 +45,27 @@ public:
   CollisionsManager() = default;
   CollisionsManager(
       Application& app,
+      VkCommandBuffer commandBuffer,
       const GBufferResources& gBuffer,
       GlobalHeap& heap);
 
   void updateUI();
   void update(
+      const FrameContext& frame,
       const StridedView<uint32_t>& indices,
       const StridedView<glm::vec3>& positions,
       const StridedView<glm::vec3>& prevPositions,
       const AABBTree& aabb);
 
+void draw(
+    const Application& app,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame,
+    VkDescriptorSet heapSet,
+    UniformHandle globalUniformsHandle);
+
 private:
   Collisions m_collisions;
+  SelectableScene m_scene;
 };
 } // namespace RibCage
