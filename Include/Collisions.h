@@ -44,8 +44,13 @@ public:
     return m_pointCollisions;
   }
 
+  const std::vector<PointTriangleCollision>& getTriangleCollisions() const {
+    return m_triangleCollisions;
+  }
+
 private:
   std::vector<PointPointCollision> m_pointCollisions;
+  std::vector<PointTriangleCollision> m_triangleCollisions;
 };
 
 class CollisionsManager {
