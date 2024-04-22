@@ -153,6 +153,8 @@ ClothSim::ClothSim(
       gBuffer,
       heap,
       m_clothSections[0].indices.getIndexCount() / 3);
+
+  m_collisions = CollisionsManager(app, gBuffer, heap);
 }
 
 void ClothSim::tryRecompileShaders(Application& app) {
@@ -253,6 +255,7 @@ void ClothSim::update(const FrameContext& frame) {
     const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
     m_aabb.update(indices, positions, m_prevPositions, frame);
+    m_collisions.update(indices, positions, m_prevPositions, m_aabb.getTree());
   }
 }
 
@@ -336,5 +339,6 @@ void ClothSim::updateUI() {
   }
 
   m_aabb.updateUI();
+  m_collisions.updateUI();
 }
 } // namespace RibCage

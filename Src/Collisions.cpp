@@ -1,6 +1,7 @@
 #include "Collisions.h"
 
 #include <Althea/Containers/StackVector.h>
+#include <Althea/Gui.h>
 
 using namespace AltheaEngine;
 
@@ -34,13 +35,13 @@ static void staticCollisionBroadphase(
       if (aabb.hasChildA(currentNode)) {
         const AABBInnerNode* nextNode = aabb.getChildA(currentNode);
         if (nextNode->intersect(box->min, box->max))
-          staticCollisionBroadphase(filteredPairs, box, currentNode, aabb);
+          staticCollisionBroadphase(filteredPairs, box, nextNode, aabb);
       }
 
       if (aabb.hasChildB(currentNode)) {
         const AABBInnerNode* nextNode = aabb.getChildB(currentNode);
         if (nextNode->intersect(box->min, box->max))
-          staticCollisionBroadphase(filteredPairs, box, currentNode, aabb);
+          staticCollisionBroadphase(filteredPairs, box, nextNode, aabb);
       }
     }
   }
@@ -93,17 +94,74 @@ Collisions::Collisions(
     const StridedView<uint32_t>& indices,
     const StridedView<glm::vec3>& positions,
     const StridedView<glm::vec3>& prevPositions,
+    float thresholdDistance,
     const AABBTree& aabb) {
 
-  // Use stack allocation instead...
-  ALTHEA_STACK_VECTOR(leafCollisions, LeafCollision, indices.getCount() / 3);
-  ALTHEA_STACK_VECTOR(filteredCollisions, const AABBLeaf*, 10);
+  m_collisions.clear();
 
-  const AABBInnerNode* pNode = aabb.getRoot();
+  ALTHEA_STACK_VECTOR(leafCollisions, LeafCollision, indices.getCount() / 3);
+  ALTHEA_STACK_VECTOR(filteredCollisions, const AABBLeaf*, 256);
+
+  float thresholdDistSq = thresholdDistance * thresholdDistance;
+
   for (uint32_t leafIdxA = 0; leafIdxA < aabb.getLeafCount(); ++leafIdxA) {
     const AABBLeaf* leafA = aabb.getLeaf(leafIdxA);
-    
+    staticCollisionBroadphase(filteredCollisions, leafA, aabb.getRoot(), aabb);
+
+    for (const AABBLeaf* leafB : filteredCollisions) {
+      // TODO: Temporary point-point collisions
+      for (uint32_t i = 0; i < 3; ++i) {
+        for (uint32_t j = 0; j < 3; ++j) {
+          uint32_t ia = indices[3 * leafA->triIdx + i];
+          uint32_t ib = indices[3 * leafB->triIdx + j];
+
+          if (ia == ib)
+            continue;
+
+          const glm::vec3& a0 = prevPositions[ia];
+          const glm::vec3& a1 = positions[ia];
+          const glm::vec3& b0 = prevPositions[ib];
+          const glm::vec3& b1 = positions[ib];
+
+          float t = pointPointCCD(a0, a1, b0, b1, thresholdDistSq);
+
+          if (t < 0.0)
+            continue;
+
+          CollisionConstraint& c = m_collisions.emplace_back();
+          c.normal = glm::normalize(b0 - a0);
+          c.primA = leafA->triIdx;
+          c.primB = leafB->triIdx;
+        }
+      }
+    }
+
+    filteredCollisions.clear();
   }
+}
+
+CollisionsManager::CollisionsManager(
+    Application& app,
+    const GBufferResources& gBuffer,
+    GlobalHeap& heap) {
+
+}
+
+float s_thresholdDistance = 0.01f;
+
+void CollisionsManager::updateUI() {
+  if (ImGui::CollapsingHeader("Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Threshold Distance:");
+    ImGui::SliderFloat("##thresholddistance", &s_thresholdDistance, 0.01f, 0.1f);
+  }
+}
+
+void CollisionsManager::update(
+      const StridedView<uint32_t>& indices,
+      const StridedView<glm::vec3>& positions,
+      const StridedView<glm::vec3>& prevPositions,
+      const AABBTree& aabb) {
+  m_collisions = Collisions(indices, positions, prevPositions, s_thresholdDistance, aabb);
 }
 
 } // namespace RibCage

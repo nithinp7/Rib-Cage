@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AABBTree.h"
+#include "Collisions.h"
 
 #include <Althea/Application.h>
 #include <Althea/BufferHeap.h>
@@ -90,5 +91,6 @@ private:
   std::vector<ClothSection> m_clothSections;
 
   AABBManager m_aabb;
+  CollisionsManager m_collisions;
 };
 } // namespace RibCage

@@ -20,10 +20,12 @@ struct CollisionConstraint {
 
 class Collisions {
 public:
+  Collisions() = default;
   Collisions(
       const StridedView<uint32_t>& indices,
       const StridedView<glm::vec3>& positions,
       const StridedView<glm::vec3>& prevPositions,
+      float thresholdDistance,
       const AABBTree& aabb);
   const std::vector<CollisionConstraint>& getCollisions() const {
     return m_collisions;
@@ -40,6 +42,13 @@ public:
       Application& app,
       const GBufferResources& gBuffer,
       GlobalHeap& heap);
+
+  void updateUI();
+  void update(
+      const StridedView<uint32_t>& indices,
+      const StridedView<glm::vec3>& positions,
+      const StridedView<glm::vec3>& prevPositions,
+      const AABBTree& aabb);
 
 private:
   Collisions m_collisions;
