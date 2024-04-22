@@ -118,6 +118,9 @@ static bool pointTriangleCCD(
   glm::vec2 clampedBc(
       glm::clamp(bc.x, 0.0f, 1.0f),
       glm::clamp(bc.y, 0.0f, 1.0f));
+  float uv = bc.x + bc.y;
+  if (uv > 1.0f)
+    clampedBc /= uv;
 
   glm::vec3 closestPoint_t0 = b2rw_t0 * clampedBc;
   glm::vec3 closestPoint_t1 = b2rw_t1 * clampedBc;
@@ -213,8 +216,8 @@ void Collisions::update(
                     b2rw_t0,
                     rw2b_t0,
                     b2rw_t1,
-                    prevPositions[ip],
-                    positions[ip],
+                    prevPositions[ip] - prevPositions[ia],
+                    positions[ip] - positions[ia],
                     thresholdDistSq,
                     bBackFace))
               continue;
@@ -258,8 +261,8 @@ void Collisions::update(
                     b2rw_t0,
                     rw2b_t0,
                     b2rw_t1,
-                    prevPositions[ip],
-                    positions[ip],
+                    prevPositions[ip] - prevPositions[ia],
+                    positions[ip] - positions[ia],
                     thresholdDistSq,
                     bBackFace))
               continue;

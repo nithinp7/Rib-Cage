@@ -230,7 +230,7 @@ void ClothSim::update(const FrameContext& frame) {
       // Fixed bottom row
       if (s_fixBottom) {
         glm::vec3 targetCenter(0.5f * width * cellSize, 0.0f, (width - 1) * cellSize);
-        float theta = s_twist * 2.0f * glm::pi<float>();
+        float theta = s_twist * glm::pi<float>();
         float cosTheta = glm::cos(theta);
         float sinTheta = glm::sin(theta);
 
