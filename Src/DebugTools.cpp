@@ -151,7 +151,7 @@ void SelectableScene::draw(
     const FrameContext& frame,
     VkDescriptorSet heapSet,
     UniformHandle globalUniformsHandle,
-    float scaleMultiplier) {
+    float scale) {
 
   {
 
@@ -167,7 +167,7 @@ void SelectableScene::draw(
       constants.selectableVBHandle =
           m_selectableVB.getCurrentBufferHandle(frame.frameRingBufferIndex)
               .index;
-      constants.selectionRadius = scaleMultiplier * SELECTION_RADIUS;
+      constants.selectionRadius = scale;
       context.updatePushConstants(constants, 0);
       context.bindDescriptorSets();
 

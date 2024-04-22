@@ -95,7 +95,7 @@ public:
       const FrameContext& frame,
       VkDescriptorSet heapSet,
       UniformHandle globalUniformsHandle,
-      float scaleMultiplier = 1.0f);
+      float scale = 1.0f);
 
   void tryRecompileShaders(Application& app) { m_pass.tryRecompile(app); }
 

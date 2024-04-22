@@ -16,28 +16,36 @@
 using namespace AltheaEngine;
 
 namespace RibCage {
-struct CollisionConstraint {
-  uint32_t primA;
-  uint32_t primB;
+struct PointPointCollision {
+  uint32_t triIdxA : 30;
+  uint32_t pointIdxA : 2;
+  uint32_t triIdxB : 30;
+  uint32_t pointIdxB : 2;
 
   glm::vec3 normal;
+};
+
+struct PointTriangleCollision {
+  uint32_t pointIdx;
+  uint32_t triangleIdx : 31;
+  uint32_t bBackFace : 1;
 };
 
 class Collisions {
 public:
   Collisions() = default;
-  Collisions(
+  void update(
       const StridedView<uint32_t>& indices,
       const StridedView<glm::vec3>& positions,
       const StridedView<glm::vec3>& prevPositions,
       float thresholdDistance,
       const AABBTree& aabb);
-  const std::vector<CollisionConstraint>& getCollisions() const {
-    return m_collisions;
+  const std::vector<PointPointCollision>& getPointCollisions() const {
+    return m_pointCollisions;
   }
 
 private:
-  std::vector<CollisionConstraint> m_collisions;
+  std::vector<PointPointCollision> m_pointCollisions;
 };
 
 class CollisionsManager {
