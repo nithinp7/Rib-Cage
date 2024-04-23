@@ -60,15 +60,15 @@ ClothSim::ClothSim(
 
   // Resources
   {
-    m_nodes = StructuredBuffer<Node>(app, MAX_NODES);
-    m_nodes.registerToHeap(heap);
-
     m_distanceConstraints =
         StructuredBuffer<DistanceConstraint>(app, MAX_DISTANCE_CONSTRAINTS);
     m_distanceConstraints.registerToHeap(heap);
 
     m_nodePositions = DynamicVertexBuffer<glm::vec3>(app, MAX_NODES, true);
     m_nodePositions.registerToHeap(heap);
+
+    m_nodeFlags = DynamicVertexBuffer<uint32_t>(app, MAX_NODES, true);
+    m_nodeFlags.registerToHeap(heap);
 
     // TODO: Should this be in a dynamic vert buffer as well...
     m_prevPositions.resize(MAX_NODES);
@@ -85,15 +85,10 @@ ClothSim::ClothSim(
         uint32_t flatIdx = i * width + j;
         glm::vec3 position = glm::vec3(i * cellSize, 0.0f, j * cellSize);
 
-        Node node{};
-        node.position = position; // TODO: Remove...
-        node.objectIdx = flatIdx / 12;
-        m_nodes.setElement(node, flatIdx);
         m_nodePositions.setVertex(position, flatIdx);
         m_prevPositions[flatIdx] = position;
       }
     }
-    m_nodes.upload(app, commandBuffer);
 
     uint32_t distConstraintCount = 0;
 
@@ -167,8 +162,8 @@ void ClothSim::tryRecompileShaders(Application& app) {
 
 static bool s_simPaused = false;
 static int s_solverSubsteps = 1;
-static float s_damping = 0.0f;
-static float s_k = 1.0f;
+static float s_damping = 0.02f;
+static float s_k = 0.125f;
 static float s_gravity = 1.0f;
 
 static bool s_fixTop = true;
@@ -229,7 +224,10 @@ void ClothSim::update(const FrameContext& frame) {
 
       // Fixed bottom row
       if (s_fixBottom) {
-        glm::vec3 targetCenter(0.5f * width * cellSize, 0.0f, (width - 1) * cellSize);
+        glm::vec3 targetCenter(
+            0.5f * width * cellSize,
+            0.0f,
+            (width - 1) * cellSize);
         float theta = s_twist * glm::pi<float>();
         float cosTheta = glm::cos(theta);
         float sinTheta = glm::sin(theta);
@@ -237,7 +235,8 @@ void ClothSim::update(const FrameContext& frame) {
         for (uint32_t i = 0; i < width; ++i) {
           uint32_t nodeIdx = width * (width - 1) + i;
           float x = i * cellSize - 0.5f * width;
-          glm::vec3 target = targetCenter + glm::vec3(cosTheta * x, sinTheta * x, 0.0f);
+          glm::vec3 target =
+              targetCenter + glm::vec3(cosTheta * x, sinTheta * x, 0.0f);
           glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
           glm::vec3 diff = target - pos;
           pos += s_k * diff;
@@ -255,7 +254,22 @@ void ClothSim::update(const FrameContext& frame) {
     const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
     m_aabb.update(indices, positions, m_prevPositions, frame);
-    m_collisions.update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
+    m_collisions
+        .update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
+
+    for (uint32_t i = 0; i < MAX_NODES; ++i)
+      m_nodeFlags.setVertex(0, i);
+
+    for (const PointTriangleCollision& c :
+         m_collisions.getCollisions().getTriangleCollisions()) {
+      m_nodeFlags.setVertex(1, c.pointIdx);
+
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 1]);
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 2]);
+    }
+
+    m_nodeFlags.upload(frame.frameRingBufferIndex);
   }
 }
 
@@ -275,11 +289,12 @@ void ClothSim::draw(
 
     uniforms.deltaTime = frame.deltaTime;
 
-    uniforms.nodes = m_nodes.getHandle().index;
+    uniforms.nodesCount = MAX_NODES;
     uniforms.nodePositions =
         m_nodePositions.getCurrentBufferHandle(frame.frameRingBufferIndex)
             .index;
-    uniforms.nodesCount = MAX_NODES;
+    uniforms.nodeFlags =
+        m_nodeFlags.getCurrentBufferHandle(frame.frameRingBufferIndex).index;
 
     uniforms.distanceConstraints = m_distanceConstraints.getHandle().index;
     uniforms.distanceConstraintsCount = MAX_DISTANCE_CONSTRAINTS;

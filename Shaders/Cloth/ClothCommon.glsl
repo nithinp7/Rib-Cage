@@ -15,9 +15,9 @@ UNIFORM_BUFFER(_clothUniforms, ClothUniforms{
 
   float deltaTime;
   
-  uint nodes;
-  uint nodePositions;
   uint nodesCount;
+  uint nodePositions;
+  uint nodeFlags;
 
   uint distanceConstraints;
   uint distanceConstraintsCount;
@@ -27,20 +27,15 @@ UNIFORM_BUFFER(_clothUniforms, ClothUniforms{
 #define resources globalResources[clothUniforms.globalResources]
 #define globals globalUniforms[clothUniforms.globalUniforms]
 
-struct Node {
-  vec3 position;
-  uint objectIdx;
-};
-// TODO: Needs to be paged eventually
-BUFFER_RW(_nodes, NodesHeap{
-  Node nodes[];
-});
-#define getNode(nodeIdx) _nodes[clothUniforms.nodes].nodes[nodeIdx]
-
 BUFFER_RW_PACKED(_nodePositions, NodePositionsHeap{
   vec3 verts[];
 });
 #define getNodePosition(nodeIdx) _nodePositions[clothUniforms.nodePositions].verts[nodeIdx]
+
+BUFFER_RW_PACKED(_nodeFlags, NodeFlags{
+  uint flags[];
+});
+#define getNodeFlags(nodeIdx) _nodeFlags[clothUniforms.nodeFlags].flags[nodeIdx]
 
 struct DistanceConstraint {
   uint a;

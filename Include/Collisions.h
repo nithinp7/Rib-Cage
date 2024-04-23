@@ -4,11 +4,10 @@
 #include "DebugTools.h"
 
 #include <Althea/Application.h>
-#include <Althea/FrameContext.h>
-#include <Althea/Containers/StridedView.h>
 #include <Althea/BindlessHandle.h>
+#include <Althea/Containers/StridedView.h>
+#include <Althea/FrameContext.h>
 #include <glm/glm.hpp>
-
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
@@ -70,12 +69,14 @@ public:
       const StridedView<glm::vec3>& prevPositions,
       const AABBTree& aabb);
 
-void draw(
-    const Application& app,
-    VkCommandBuffer commandBuffer,
-    const FrameContext& frame,
-    VkDescriptorSet heapSet,
-    UniformHandle globalUniformsHandle);
+  void draw(
+      const Application& app,
+      VkCommandBuffer commandBuffer,
+      const FrameContext& frame,
+      VkDescriptorSet heapSet,
+      UniformHandle globalUniformsHandle);
+
+  const Collisions& getCollisions() const { return m_collisions; }
 
 private:
   Collisions m_collisions;

@@ -28,9 +28,9 @@ struct ClothUniforms {
 
   float deltaTime;
 
-  uint32_t nodes;
-  uint32_t nodePositions;
   uint32_t nodesCount;
+  uint32_t nodePositions;
+  uint32_t nodeFlags;
 
   uint32_t distanceConstraints;
   uint32_t distanceConstraintsCount;
@@ -83,10 +83,11 @@ private:
   std::vector<ComputePipeline> m_solvePasses;
 
   // TODO: These probably need to become paged heaps
-  StructuredBuffer<Node> m_nodes;
   StructuredBuffer<DistanceConstraint> m_distanceConstraints;
   std::vector<glm::vec3> m_prevPositions;
+
   DynamicVertexBuffer<glm::vec3> m_nodePositions;
+  DynamicVertexBuffer<uint32_t> m_nodeFlags;
 
   std::vector<ClothSection> m_clothSections;
 

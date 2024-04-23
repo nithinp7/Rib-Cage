@@ -150,24 +150,21 @@ void main() {
     return;
   }
 
+  // Since we use SSAO, we use the occlusion channel as a debug stencil
+  vec3 metallicRoughnessDebug = 
+      texture(gBufferMetallicRoughnessOcclusion, uv).rgb;
+
   float d = texture(gBufferDepth, uv).r;
   vec3 position = reconstructPosition(uv, d);
   vec3 normal = normalize(texture(gBufferNormal, uv).xyz);
-  vec3 metallicRoughnessOcclusion = 
-      texture(gBufferMetallicRoughnessOcclusion, uv).rgb;
-  // metallicRoughnessOcclusion.y *= 0.1;
 
   vec3 reflectedDirection = reflect(normalize(direction), normal);
-  // vec4 reflectedColor = sampleReflection(0.2);//metallicRoughnessOcclusion.y);
-  vec4 reflectedColor = vec4(sampleEnvMap(reflectedDirection, metallicRoughnessOcclusion.y), 1.0);
-  // vec4 reflectedColor = sampleReflection(metallicRoughnessOcclusion.y);
-  // reflectedColor = reflectedColor / reflectedColor.a;
-  // reflectedColor.rgb = mix(baseColor, reflectedColor.rgb, reflectedColor.a);
+  vec4 reflectedColor = vec4(sampleEnvMap(reflectedDirection, metallicRoughnessDebug.y), 1.0);
 
   vec3 irradianceColor = sampleIrrMap(normal);
 
 #ifdef ENABLE_SSAO
-  metallicRoughnessOcclusion.z = computeSSAO(uv, position.xyz, normal);
+  float occlusion = computeSSAO(uv, position.xyz, normal);
 #endif
 
   vec3 material = 
@@ -178,16 +175,16 @@ void main() {
         baseColor.rgb, 
         reflectedColor.rgb, 
         irradianceColor,
-        metallicRoughnessOcclusion.x, 
-        metallicRoughnessOcclusion.y, 
-        metallicRoughnessOcclusion.z);
+        metallicRoughnessDebug.x, 
+        metallicRoughnessDebug.y, 
+        occlusion);
 
 #ifndef SKIP_TONEMAP
   material = vec3(1.0) - exp(-material * globals.exposure);
 #endif
 
   outColor = vec4(material, 1.0);
-  // outColor = vec4(metallicRoughnessOcclusion.rgb, 1.0);
-  // outColor = vec4(irradianceColor, 1.0);
-  // outColor = vec4(reflectedColor.rgb, 1.0);
+
+  if (metallicRoughnessDebug.z > 0.0)
+    outColor.rgb = mix(outColor.rgb, baseColor.rgb, metallicRoughnessDebug.z * metallicRoughnessDebug.z);
 }
