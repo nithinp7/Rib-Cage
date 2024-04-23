@@ -78,6 +78,9 @@ public:
 
   const Collisions& getCollisions() const { return m_collisions; }
 
+  bool shouldVisualizeCollisions() const;
+  float getThresholdDistance() const;
+
 private:
   Collisions m_collisions;
   SelectableScene m_scene;

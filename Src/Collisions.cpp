@@ -255,7 +255,7 @@ void Collisions::update(
             // Skip if this vertex is part of the triangle
             if (ip == ia || ip == ib || ip == ic)
               continue;
-            
+
             bool bBackFace;
             if (!pointTriangleCCD(
                     b2rw_t0,
@@ -323,6 +323,7 @@ CollisionsManager::CollisionsManager(
 
 void CollisionsManager::updateUI() {
   if (ImGui::CollapsingHeader("Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Indent();
     static const char* modes[] = {"Triangle-Triangle", "Point-Point"};
     ImGui::Text("Collision Mode:");
     ImGui::Combo("##collisionmode", &s_collisionMode, modes, 2);
@@ -336,6 +337,7 @@ void CollisionsManager::updateUI() {
     ImGui::Separator();
     ImGui::Text("Visualize Collisions:");
     ImGui::Checkbox("##visualizecollisions", &s_bVisualizeCollisions);
+    ImGui::Unindent();
   }
 }
 
@@ -352,7 +354,8 @@ void CollisionsManager::update(
     m_scene.clear();
 
     if (s_collisionMode == 0) {
-      for (const PointTriangleCollision& c : m_collisions.getTriangleCollisions()) {
+      for (const PointTriangleCollision& c :
+           m_collisions.getTriangleCollisions()) {
         const glm::vec3& p = positions[c.pointIdx];
         m_scene.addVertex(p);
       }
@@ -385,4 +388,11 @@ void CollisionsManager::draw(
   }
 }
 
+bool CollisionsManager::shouldVisualizeCollisions() const {
+  return s_bVisualizeCollisions;
+}
+
+float CollisionsManager::getThresholdDistance() const {
+  return s_thresholdDistance;
+}
 } // namespace RibCage

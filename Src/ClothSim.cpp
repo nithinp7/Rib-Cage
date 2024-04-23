@@ -9,6 +9,8 @@ using namespace AltheaEngine;
 #define MAX_NODES 10000 // 100x100
 #define MAX_DISTANCE_CONSTRAINTS 100000
 
+#define SHEET_WIDTH 10
+
 namespace RibCage {
 struct PushConstants {
   uint32_t clothUniforms;
@@ -79,7 +81,7 @@ ClothSim::ClothSim(
     float cellSize = 1.0f;
     float cellDiagonal = cellSize * glm::sqrt(2.0f);
 
-    uint32_t width = 10;
+    uint32_t width = SHEET_WIDTH;
     for (uint32_t i = 0; i < width; ++i) {
       for (uint32_t j = 0; j < width; ++j) {
         uint32_t flatIdx = i * width + j;
@@ -161,17 +163,29 @@ void ClothSim::tryRecompileShaders(Application& app) {
 }
 
 static bool s_simPaused = false;
+static int s_stepFrameCounter = 0;
+
 static int s_solverSubsteps = 1;
 static float s_damping = 0.02f;
 static float s_k = 0.125f;
+static float s_collisionStrength = 1.0f;
 static float s_gravity = 1.0f;
+
+static bool s_resolveCollisions = true;
+static int s_collisionIterations = 3;
 
 static bool s_fixTop = true;
 static bool s_fixBottom = true;
 static float s_twist = 0.0f;
 
 void ClothSim::update(const FrameContext& frame) {
-  if (!s_simPaused) {
+  const std::vector<uint32_t>& indices =
+      m_clothSections[0].indices.getIndices();
+
+  if (!s_simPaused || s_stepFrameCounter > 0) {
+    if (s_stepFrameCounter > 0)
+      --s_stepFrameCounter;
+
     // TODO: Sim solver step
     float dt = 1.0f / 30.0f;
 
@@ -210,7 +224,7 @@ void ClothSim::update(const FrameContext& frame) {
         p1 += disp;
       }
 
-      uint32_t width = 10;
+      uint32_t width = SHEET_WIDTH;
       float cellSize = 1.0f;
       // Fixed top row
       if (s_fixTop) {
@@ -242,6 +256,46 @@ void ClothSim::update(const FrameContext& frame) {
           pos += s_k * diff;
         }
       }
+
+      // Collisions
+      if (s_resolveCollisions) {
+
+        float thresholdDistance = 0.9f * m_collisions.getThresholdDistance();
+
+        for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
+          for (const PointTriangleCollision& col :
+               m_collisions.getCollisions().getTriangleCollisions()) {
+            glm::vec3& a =
+                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 0]);
+            glm::vec3& b =
+                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 1]);
+            glm::vec3& c =
+                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 2]);
+            glm::vec3& p = m_nodePositions.getVertex(col.pointIdx);
+
+            glm::vec3 ab = b - a;
+            glm::vec3 ac = c - a;
+            glm::vec3 ap = p - a;
+
+            // TODO: handle degenerate case
+
+            glm::vec3 n = glm::normalize(glm::cross(ab, ac));
+            if (col.bBackFace)
+              n = -n;
+
+            float d = glm::dot(ap, n);
+            if (d < thresholdDistance) {
+              glm::vec3 diff =
+                  0.25f * s_collisionStrength * (thresholdDistance - d) * n;
+
+              p += 3.0f * diff;
+              a -= diff;
+              b -= diff;
+              c -= diff;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -249,8 +303,6 @@ void ClothSim::update(const FrameContext& frame) {
 
   // Fix-up AABB
   {
-    const std::vector<uint32_t>& indices =
-        m_clothSections[0].indices.getIndices();
     const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
     m_aabb.update(indices, positions, m_prevPositions, frame);
@@ -260,13 +312,15 @@ void ClothSim::update(const FrameContext& frame) {
     for (uint32_t i = 0; i < MAX_NODES; ++i)
       m_nodeFlags.setVertex(0, i);
 
-    for (const PointTriangleCollision& c :
-         m_collisions.getCollisions().getTriangleCollisions()) {
-      m_nodeFlags.setVertex(1, c.pointIdx);
+    if (m_collisions.shouldVisualizeCollisions()) {
+      for (const PointTriangleCollision& c :
+           m_collisions.getCollisions().getTriangleCollisions()) {
+        m_nodeFlags.setVertex(1, c.pointIdx);
 
-      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
-      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 1]);
-      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 2]);
+        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
+        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 1]);
+        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 2]);
+      }
     }
 
     m_nodeFlags.upload(frame.frameRingBufferIndex);
@@ -333,26 +387,68 @@ void ClothSim::draw(
 
 void ClothSim::updateUI() {
   if (ImGui::CollapsingHeader("Cloth Sim", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Indent();
     ImGui::Text("Paused:");
     ImGui::Checkbox("##paused", &s_simPaused);
+    ImGui::Text("Step Frames:");
+    if (ImGui::Button(">"))
+      s_stepFrameCounter = 1;
+    ImGui::SameLine();
+    if (ImGui::Button(">>"))
+      s_stepFrameCounter = 8;
+    ImGui::SameLine();
+    if (ImGui::Button(">>>"))
+      s_stepFrameCounter = 30;
 
-    ImGui::Separator();
-    ImGui::Text("Substeps:");
-    ImGui::SliderInt("##substeps", &s_solverSubsteps, 1, 8);
-    ImGui::Text("Damping:");
-    ImGui::SliderFloat("##damping", &s_damping, 0.0f, 1.0f);
-    ImGui::Text("K:");
-    ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
-    ImGui::Text("Gravity:");
-    ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
+    ImGui::Text("Resolve Collisions:");
+    ImGui::Checkbox("##resolvecollisions", &s_resolveCollisions);
 
-    ImGui::Separator();
-    ImGui::Text("Fix Sheet Top:");
-    ImGui::Checkbox("##fixtop", &s_fixTop);
-    ImGui::Text("Fix Sheet Bottom:");
-    ImGui::Checkbox("##fixbottom", &s_fixBottom);
-    ImGui::Text("Twist Percentage:");
-    ImGui::SliderFloat("##twistamt", &s_twist, 0.0f, 1.0f);
+    if (ImGui::CollapsingHeader(
+            "Constraints",
+            ImGuiTreeNodeFlags_DefaultOpen)) {
+      ImGui::Indent();
+
+      ImGui::Text("Twist Percentage:");
+      ImGui::SliderFloat("##twistamt", &s_twist, 0.0f, 1.0f);
+
+      ImGui::Text("Fix Top:");
+      ImGui::SameLine();
+      ImGui::Checkbox("##fixtop", &s_fixTop);
+      
+      ImGui::Text("Fix Bottom:");
+      ImGui::SameLine();
+      ImGui::Checkbox("##fixbottom", &s_fixBottom);
+      
+      ImGui::Unindent();
+    }
+
+    if (ImGui::CollapsingHeader("Iterations")) {
+      ImGui::Indent();
+
+      ImGui::Text("Substeps:");
+      ImGui::SliderInt("##substeps", &s_solverSubsteps, 1, 8);
+      ImGui::Text("Collision Iterations:");
+      ImGui::SliderInt("##colIters", &s_collisionIterations, 1, 8);
+
+      ImGui::Unindent();
+    }
+
+    if (ImGui::CollapsingHeader("Params")) {
+      ImGui::Indent();
+
+      ImGui::Text("Collision Strength:");
+      ImGui::SliderFloat("##colstrength", &s_collisionStrength, 0.0f, 1.0f);
+      ImGui::Text("Damping:");
+      ImGui::SliderFloat("##damping", &s_damping, 0.0f, 1.0f);
+      ImGui::Text("K:");
+      ImGui::SliderFloat("##springstrength", &s_k, 0.01f, 1.0f);
+      ImGui::Text("Gravity:");
+      ImGui::SliderFloat("##gravity", &s_gravity, 0.25f, 4.0f);
+
+      ImGui::Unindent();
+    }
+
+    ImGui::Unindent();
   }
 
   m_aabb.updateUI();

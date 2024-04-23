@@ -261,12 +261,14 @@ void AABBManager::update(
 
 void AABBManager::updateUI() {
   if (ImGui::CollapsingHeader("BVH")) {
+    ImGui::Indent();
     ImGui::Text("Padding:");
     ImGui::SliderFloat("##padding", &s_padding, 0.0f, 2.5f);
     ImGui::Text("Show AABB Leaves:");
     ImGui::Checkbox("##showleaves", &s_showAABBLeaves);
     ImGui::Text("Show AABB Inner Nodes:");
     ImGui::Checkbox("##showinnernodes", &s_showAABBInnerNodes);
+    ImGui::Unindent();
   }
 }
 
