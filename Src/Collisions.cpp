@@ -459,11 +459,11 @@ void CollisionsManager::updateUI() {
         0.5f);
 
     ImGui::Separator();
-    ImGui::Text("Visualize Collisions:");
+    ImGui::Text("Show Contacts:");
     ImGui::SameLine();
     ImGui::Checkbox("##visualizecollisions", &s_bVisualizeCollisions);
     static const char* modes[] = {"Edge-Edge", "Point-Triangle"};
-    ImGui::Text("Visualization Mode:");
+    ImGui::Text("Viz Mode:");
     ImGui::SameLine();
     ImGui::Combo("##visualizationmode", &s_visualizationMode, modes, 2);
     ImGui::Unindent();
@@ -491,12 +491,14 @@ void CollisionsManager::update(
         }
       } else {
         for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
-          const glm::vec3& a = positions[3 * col.triangleAIdx + col.edgeAIdx];
+          const glm::vec3& a = 
+              positions[indices[3 * col.triangleAIdx + col.edgeAIdx]];
           const glm::vec3& b =
-              positions[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3];
-          const glm::vec3& c = positions[3 * col.triangleBIdx + col.edgeBIdx];
+              positions[indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3]];
+          const glm::vec3& c = 
+              positions[indices[3 * col.triangleBIdx + col.edgeBIdx]];
           const glm::vec3& d =
-              positions[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3];
+              positions[indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]];
 
           m_scene.addVertex(glm::mix(a, b, col.u));
           m_scene.addVertex(glm::mix(c, d, col.v));

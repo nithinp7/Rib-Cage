@@ -165,13 +165,15 @@ void ClothSim::tryRecompileShaders(Application& app) {
 static bool s_simPaused = false;
 static int s_stepFrameCounter = 0;
 
+static bool s_bDebugColoring = false;
+
 static int s_solverSubsteps = 1;
 static float s_damping = 0.02f;
 static float s_k = 0.125f;
 static float s_collisionStrength = 1.0f;
 static float s_gravity = 1.0f;
 
-static bool s_resolveCollisions = true;
+static bool s_resolveCollisions = false; // true;
 static int s_collisionIterations = 3;
 
 static bool s_fixTop = true;
@@ -260,7 +262,7 @@ void ClothSim::update(const FrameContext& frame) {
       // Collisions
       if (s_resolveCollisions) {
 
-        float thresholdDistance = 0.9f * m_collisions.getThresholdDistance();
+        float thresholdDistance = m_collisions.getThresholdDistance();
 
         for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
           for (const PointTriangleCollision& col :
@@ -294,6 +296,31 @@ void ClothSim::update(const FrameContext& frame) {
               c -= diff;
             }
           }
+
+          for (const EdgeCollision& col :
+               m_collisions.getCollisions().getEdgeCollisions()) {
+            glm::vec3& a = m_nodePositions.getVertex(
+                indices[3 * col.triangleAIdx + col.edgeAIdx]);
+            glm::vec3& b = m_nodePositions.getVertex(
+                indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3]);
+            glm::vec3& c = m_nodePositions.getVertex(
+                indices[3 * col.triangleBIdx + col.edgeBIdx]);
+            glm::vec3& d = m_nodePositions.getVertex(
+                indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]);
+
+            glm::vec3 sep = glm::mix(c, d, col.v) - glm::mix(a, b, col.u);
+
+            float sepDist = glm::dot(sep, col.normal);
+
+            if (sepDist < thresholdDistance) {
+              glm::vec3 diff = 0.5f * s_collisionStrength *
+                               (thresholdDistance - sepDist) * col.normal;
+              a -= diff;
+              b -= diff;
+              c += diff;
+              d += diff;
+            }
+          }
         }
       }
     }
@@ -312,7 +339,7 @@ void ClothSim::update(const FrameContext& frame) {
     for (uint32_t i = 0; i < MAX_NODES; ++i)
       m_nodeFlags.setVertex(0, i);
 
-    if (m_collisions.shouldVisualizeCollisions()) {
+    if (s_bDebugColoring) {
       for (const PointTriangleCollision& c :
            m_collisions.getCollisions().getTriangleCollisions()) {
         m_nodeFlags.setVertex(1, c.pointIdx);
@@ -400,6 +427,10 @@ void ClothSim::updateUI() {
     if (ImGui::Button(">>>"))
       s_stepFrameCounter = 30;
 
+    ImGui::Text("Debug Coloring:");
+    ImGui::SameLine();
+    ImGui::Checkbox("##debugcoloring", &s_bDebugColoring);
+
     ImGui::Text("Resolve Collisions:");
     ImGui::Checkbox("##resolvecollisions", &s_resolveCollisions);
 
@@ -414,11 +445,11 @@ void ClothSim::updateUI() {
       ImGui::Text("Fix Top:");
       ImGui::SameLine();
       ImGui::Checkbox("##fixtop", &s_fixTop);
-      
+
       ImGui::Text("Fix Bottom:");
       ImGui::SameLine();
       ImGui::Checkbox("##fixbottom", &s_fixBottom);
-      
+
       ImGui::Unindent();
     }
 
