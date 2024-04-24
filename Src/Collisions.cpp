@@ -159,9 +159,98 @@ static void computeBarycentrics(
   b2rw_t1[1] = c1 - a1;
 }
 
+static bool edgeEdgeCCD(
+    const glm::vec3& a0,
+    const glm::vec3& a1,
+    const glm::vec3& b0,
+    const glm::vec3& b1,
+    const glm::vec3& c0,
+    const glm::vec3& c1,
+    const glm::vec3& d0,
+    const glm::vec3& d1,
+    float thresholdDistanceSq,
+    float& u,
+    float& v,
+    glm::vec3& n) {
+  // Note: This routine in particular is largely taken from Pies (my previous
+  // soft body simulation)
+  // TODO: Worth reviewing this code at least to re-understand what is going on
+  // here
+
+  glm::vec3 ab0 = b0 - a0;
+  glm::vec3 cd0 = d0 - a0;
+
+  glm::vec3 ac0 = c0 - a0;
+  glm::vec3 ad0 = d0 - a0;
+  // Find the shortest distance between two lines
+
+  float abMagSq = glm::dot(ab0, ab0);
+  float cdMagSq = glm::dot(cd0, cd0);
+  float abDotCd = glm::dot(ab0, ab0);
+
+  float acDotAb = glm::dot(ac0, ab0);
+  float acDotCd = glm::dot(ac0, cd0);
+
+  float det = abMagSq * -cdMagSq + abDotCd * abDotCd;
+  u = 0.0f;
+  v = 0.0f;
+  if (det != 0.0f) {
+    det = 1.0f / det;
+    u = (acDotAb * -cdMagSq + abDotCd * acDotCd) * det;
+    v = (abMagSq * acDotCd - acDotAb * abDotCd) * det;
+  } else {
+    float u0 = 0.0f;
+    float u1 = 1.0f;
+    float v0 = glm::dot(ac0, ab0);
+    float v1 = glm::dot(ad0, ab0);
+
+    bool flip0 = false;
+    bool flip1 = false;
+
+    if (u0 > u1) {
+      std::swap(u0, u1);
+      flip0 = true;
+    }
+
+    if (v0 > v1) {
+      std::swap(v0, v1);
+      flip1 = true;
+    }
+
+    if (u0 >= v1) {
+      u = flip0 ? 1.0f : 0.0f;
+      v = flip1 ? 0.0f : 1.0f;
+    } else if (v0 >= u1) {
+      u = flip0 ? 0.0f : 1.0f;
+      v = flip1 ? 1.0f : 0.0f;
+    } else {
+      float mid = (u0 > v0) ? (u0 + v1) * 0.5f : (v0 + u1) * 0.5f;
+      u = (u0 == u1) ? 0.5f : (mid - u0) / (u1 - u0);
+      v = (v0 == v1) ? 0.5f : (mid - v0) / (v1 - v0);
+    }
+  }
+
+  u = glm::clamp(u, 0.0f, 1.0f);
+  v = glm::clamp(v, 0.0f, 1.0f);
+
+  glm::vec3 closestPoint_ab_t0 = glm::mix(a0, b0, u);
+  glm::vec3 closestPoint_ab_t1 = glm::mix(a1, b1, u);
+  glm::vec3 closestPoint_cd_t0 = glm::mix(c0, d0, v);
+  glm::vec3 closestPoint_cd_t1 = glm::mix(c1, d1, v);
+
+  return pointPointCCD(
+      closestPoint_ab_t0,
+      closestPoint_ab_t1,
+      closestPoint_cd_t0,
+      closestPoint_cd_t1,
+      thresholdDistanceSq,
+      n);
+}
+
 int s_collisionMode = 0;
 float s_thresholdDistance = 0.1f;
 bool s_bVisualizeCollisions = true;
+int s_visualizationMode = 0;
 
 void Collisions::update(
     const StridedView<uint32_t>& indices,
@@ -172,6 +261,7 @@ void Collisions::update(
 
   m_pointCollisions.clear();
   m_triangleCollisions.clear();
+  m_edgeCollisions.clear();
 
   ALTHEA_STACK_VECTOR(filteredCollisions, const AABBLeaf*, 256);
 
@@ -274,9 +364,43 @@ void Collisions::update(
           }
         }
 
+        // Check every combination of lines
         for (uint32_t i = 0; i < 3; ++i) {
           for (uint32_t j = 0; j < 3; ++j) {
-            // TODO: Every combination of line-line checking...
+            uint32_t ia = indices[3 * leafA->triIdx + i];
+            uint32_t ib = indices[3 * leafA->triIdx + (i + 1) % 3];
+            uint32_t ic = indices[3 * leafB->triIdx + j];
+            uint32_t id = indices[3 * leafB->triIdx + (j + 1) % 3];
+
+            // skip any line combinations with common vertices
+            if (ia == ic || ia == id || ib == ic || ib == id)
+              continue;
+
+            glm::vec3 n;
+            float u, v;
+            if (!edgeEdgeCCD(
+                    prevPositions[ia],
+                    positions[ia],
+                    prevPositions[ib],
+                    positions[ib],
+                    prevPositions[ic],
+                    positions[ic],
+                    prevPositions[id],
+                    positions[id],
+                    thresholdDistSq,
+                    u,
+                    v,
+                    n))
+              continue;
+
+            EdgeCollision& c = m_edgeCollisions.emplace_back();
+            c.triangleAIdx = leafA->triIdx;
+            c.edgeAIdx = i;
+            c.triangleBIdx = leafB->triIdx;
+            c.edgeBIdx = j;
+            c.u = u;
+            c.v = v;
+            c.normal = n;
           }
         }
       } else {
@@ -324,9 +448,9 @@ CollisionsManager::CollisionsManager(
 void CollisionsManager::updateUI() {
   if (ImGui::CollapsingHeader("Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Indent();
-    static const char* modes[] = {"Triangle-Triangle", "Point-Point"};
-    ImGui::Text("Collision Mode:");
-    ImGui::Combo("##collisionmode", &s_collisionMode, modes, 2);
+    // static const char* modes[] = {"Triangle-Triangle", "Point-Point"};
+    // ImGui::Text("Collision Mode:");
+    // ImGui::Combo("##collisionmode", &s_collisionMode, modes, 2);
     ImGui::Text("Threshold Distance:");
     ImGui::SliderFloat(
         "##thresholddistance",
@@ -336,7 +460,12 @@ void CollisionsManager::updateUI() {
 
     ImGui::Separator();
     ImGui::Text("Visualize Collisions:");
+    ImGui::SameLine();
     ImGui::Checkbox("##visualizecollisions", &s_bVisualizeCollisions);
+    static const char* modes[] = {"Edge-Edge", "Point-Triangle"};
+    ImGui::Text("Visualization Mode:");
+    ImGui::SameLine();
+    ImGui::Combo("##visualizationmode", &s_visualizationMode, modes, 2);
     ImGui::Unindent();
   }
 }
@@ -354,10 +483,24 @@ void CollisionsManager::update(
     m_scene.clear();
 
     if (s_collisionMode == 0) {
-      for (const PointTriangleCollision& c :
-           m_collisions.getTriangleCollisions()) {
-        const glm::vec3& p = positions[c.pointIdx];
-        m_scene.addVertex(p);
+      if (s_visualizationMode == 1) {
+        for (const PointTriangleCollision& col :
+             m_collisions.getTriangleCollisions()) {
+          const glm::vec3& p = positions[col.pointIdx];
+          m_scene.addVertex(p);
+        }
+      } else {
+        for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
+          const glm::vec3& a = positions[3 * col.triangleAIdx + col.edgeAIdx];
+          const glm::vec3& b =
+              positions[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3];
+          const glm::vec3& c = positions[3 * col.triangleBIdx + col.edgeBIdx];
+          const glm::vec3& d =
+              positions[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3];
+
+          m_scene.addVertex(glm::mix(a, b, col.u));
+          m_scene.addVertex(glm::mix(c, d, col.v));
+        }
       }
     } else {
       for (const PointPointCollision& c : m_collisions.getPointCollisions()) {

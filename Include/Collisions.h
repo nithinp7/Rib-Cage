@@ -30,6 +30,18 @@ struct PointTriangleCollision {
   uint32_t bBackFace : 1;
 };
 
+struct EdgeCollision {
+  glm::vec3 normal;
+
+  float u;
+  float v;
+
+  uint32_t triangleAIdx : 30;
+  uint32_t edgeAIdx : 2;
+  uint32_t triangleBIdx : 30;
+  uint32_t edgeBIdx : 2;
+};
+
 class Collisions {
 public:
   Collisions() = default;
@@ -47,9 +59,13 @@ public:
     return m_triangleCollisions;
   }
 
+  const std::vector<EdgeCollision>& getEdgeCollisions() const {
+    return m_edgeCollisions;
+  }
 private:
   std::vector<PointPointCollision> m_pointCollisions;
   std::vector<PointTriangleCollision> m_triangleCollisions;
+  std::vector<EdgeCollision> m_edgeCollisions;
 };
 
 class CollisionsManager {
