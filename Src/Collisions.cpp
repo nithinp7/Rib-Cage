@@ -6,7 +6,7 @@
 
 using namespace AltheaEngine;
 
-#define EPSILON 0.00001f
+#define EPSILON 0.000001f
 
 namespace RibCage {
 struct LeafCollision {
@@ -77,6 +77,9 @@ bool pointPointCCD(
     // TODO: Consider case that dMagSq < EPSILON and the below is unsafe...
     // need to detect this and report for debugging. Ideally the point
     // can't get that close to a triangle without being forced away
+    if (dMagSq < EPSILON)
+      return false; // ???
+    
     n = d / sqrt(dMagSq);
     return true;
   }
@@ -160,6 +163,66 @@ static void computeBarycentrics(
 }
 
 static bool edgeEdgeCCD(
+    const glm::vec3& a0,
+    const glm::vec3& a1,
+    const glm::vec3& b0,
+    const glm::vec3& b1,
+    const glm::vec3& c0,
+    const glm::vec3& c1,
+    const glm::vec3& d0,
+    const glm::vec3& d1,
+    float thresholdDistanceSq,
+    float& u,
+    float& v,
+    glm::vec3& n) {
+  
+  // Find closest pair of points on each line at t0
+
+  glm::vec3 ab = b0 - a0;
+  glm::vec3 cd = d0 - c0;
+  float cdMag = glm::length(cd); // TODO: Can we avoid this sqrt...
+  glm::vec3 cdNorm = cd / cdMag; // TODO: Handle degenerate case...
+
+  glm::vec3 ca = a0 - c0;
+
+  // Want argmin(u,v) ||a + abu - c - cdv||^2 
+  // where u and v are clamped to [0,1]
+  // Solve unconstrained minimization first, then clamp u
+  // then recompute v, then clamp v.
+  // TODO: Is the above a bad assumption??
+  
+  // For given u, corresponding v is computed as follows
+  // v = (ca + ab u) * cd / ||cd||
+
+  // TODO: Need to document offline notes behind this equation
+  glm::vec3 A = glm::dot(ab, cdNorm) * (cd - ab);
+  glm::vec3 B = glm::dot(ca, cdNorm) * cd - ca;
+
+  // argmin(u) ||Au + B||^2
+  // 0 = 2 ||A||^2 u + 2 A * B
+  u = -glm::dot(A,B)/glm::dot(A,A); // TODO: Degenerate case handling...
+  u = glm::clamp(u, 0.0f, 1.0f); // TODO: Clamp before or after computing v??
+
+  v = glm::dot(ca + ab * u, cdNorm) / cdMag;
+
+  u = glm::clamp(u, 0.0f, 1.0f);
+  v = glm::clamp(v, 0.0f, 1.0f);
+
+  glm::vec3 closestPoint_ab_t0 = glm::mix(a0, b0, u);
+  glm::vec3 closestPoint_ab_t1 = glm::mix(a1, b1, u);
+  glm::vec3 closestPoint_cd_t0 = glm::mix(c0, d0, v);
+  glm::vec3 closestPoint_cd_t1 = glm::mix(c1, d1, v);
+
+  return pointPointCCD(
+      closestPoint_ab_t0,
+      closestPoint_ab_t1,
+      closestPoint_cd_t0,
+      closestPoint_cd_t1,
+      thresholdDistanceSq,
+      n);
+}
+
+static bool edgeEdgeCCD2(
     const glm::vec3& a0,
     const glm::vec3& a1,
     const glm::vec3& b0,

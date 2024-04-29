@@ -168,6 +168,7 @@ static int s_stepFrameCounter = 0;
 static bool s_bDebugColoring = false;
 
 static int s_solverSubsteps = 1;
+static float s_maxSpeed = 0.1f;
 static float s_damping = 0.02f;
 static float s_k = 0.125f;
 static float s_collisionStrength = 1.0f;
@@ -198,6 +199,9 @@ void ClothSim::update(const FrameContext& frame) {
          ++nodeIdx) {
       glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
       glm::vec3 velDt = pos - m_prevPositions[nodeIdx];
+      float speed = glm::length(velDt);
+      if (speed > s_maxSpeed)
+        velDt *= s_maxSpeed / speed;
 
       m_prevPositions[nodeIdx] = pos;
 
@@ -218,7 +222,10 @@ void ClothSim::update(const FrameContext& frame) {
         float dist = glm::length(diff);
         diff /= dist;
 
-        if (dist < 0.001f)
+        // if (dist < c.restLength && dist > 0.5f * c.restLength)
+        //   continue;
+
+        if (dist < 0.000001f)
           diff = glm::vec3(1.0f, 0.0f, 0.0f);
 
         glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
@@ -244,7 +251,7 @@ void ClothSim::update(const FrameContext& frame) {
             0.5f * width * cellSize,
             0.0f,
             (width - 1) * cellSize);
-        float theta = s_twist * glm::pi<float>();
+        float theta = s_twist * 2.0f * glm::pi<float>();
         float cosTheta = glm::cos(theta);
         float sinTheta = glm::sin(theta);
 
@@ -313,12 +320,12 @@ void ClothSim::update(const FrameContext& frame) {
             float sepDist = glm::dot(sep, col.normal);
 
             if (sepDist < thresholdDistance) {
-              glm::vec3 diff = 0.5f * s_collisionStrength *
+              glm::vec3 diff =  0.5f * s_collisionStrength *
                                (thresholdDistance - sepDist) * col.normal;
-              a -= diff;
-              b -= diff;
-              c += diff;
-              d += diff;
+              a -= diff * (1.0f - col.u);
+              b -= diff * col.u;
+              c += diff * (1.0f - col.v);
+              d += diff * col.v;
             }
           }
         }
@@ -469,6 +476,8 @@ void ClothSim::updateUI() {
 
       ImGui::Text("Collision Strength:");
       ImGui::SliderFloat("##colstrength", &s_collisionStrength, 0.0f, 1.0f);
+      ImGui::Text("Max Speed:");
+      ImGui::SliderFloat("##maxSpeed", &s_maxSpeed, 0.01f, 0.5f);
       ImGui::Text("Damping:");
       ImGui::SliderFloat("##damping", &s_damping, 0.0f, 1.0f);
       ImGui::Text("K:");
