@@ -505,7 +505,7 @@ CollisionsManager::CollisionsManager(
     VkCommandBuffer commandBuffer,
     const GBufferResources& gBuffer,
     GlobalHeap& heap) {
-  m_scene = SelectableScene(app, heap, commandBuffer, gBuffer);
+  m_dbgViz = DebugVisualizationScene(app, heap, commandBuffer, gBuffer);
 }
 
 void CollisionsManager::updateUI() {
@@ -543,14 +543,14 @@ void CollisionsManager::update(
       .update(indices, positions, prevPositions, s_thresholdDistance, aabb);
 
   if (s_bVisualizeCollisions) {
-    m_scene.clear();
+    m_dbgViz.reset();
 
     if (s_collisionMode == 0) {
       if (s_visualizationMode == 1) {
         for (const PointTriangleCollision& col :
              m_collisions.getTriangleCollisions()) {
           const glm::vec3& p = positions[col.pointIdx];
-          m_scene.addVertex(p);
+          // m_scene.addVertex(p); // TODO!!!
         }
       } else {
         for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
@@ -563,19 +563,26 @@ void CollisionsManager::update(
           const glm::vec3& d =
               positions[indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]];
 
-          m_scene.addVertex(glm::mix(a, b, col.u));
-          m_scene.addVertex(glm::mix(c, d, col.v));
+          glm::vec3 p0 = glm::mix(a, b, col.u);
+          glm::vec3 p1 = glm::mix(c, d, col.v);
+
+          // involved edges in green
+          uint32_t green = 0x00ff00ff;
+          m_dbgViz.addLine(a, b, green);
+          m_dbgViz.addLine(c, d, green);
+          
+          // computed closest distance in red
+          uint32_t red = 0xff0000ff;
+          m_dbgViz.addLine(p0, p1, red);
         }
       }
     } else {
       for (const PointPointCollision& c : m_collisions.getPointCollisions()) {
         const glm::vec3& p0 = positions[indices[3 * c.triIdxA + c.pointIdxA]];
         const glm::vec3& p1 = positions[indices[3 * c.triIdxB + c.pointIdxB]];
-        m_scene.addVertex(p0);
-        m_scene.addVertex(p1);
+        m_dbgViz.addLine(p0, p1, 0xff0000ff);
       }
     }
-    m_scene.update(frame);
   }
 }
 
@@ -586,7 +593,7 @@ void CollisionsManager::draw(
     VkDescriptorSet heapSet,
     UniformHandle globalUniformsHandle) {
   if (s_bVisualizeCollisions) {
-    m_scene.draw(
+    m_dbgViz.draw(
         app,
         commandBuffer,
         frame,

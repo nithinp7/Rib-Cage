@@ -16,6 +16,7 @@
 #include <vector>
 
 #define MAX_SELECTABLE_VERTS_COUNT 1024
+#define MAX_DBG_LINES 2048
 
 using namespace AltheaEngine;
 
@@ -36,6 +37,48 @@ struct SceneQueryResult {
   float t;
   int index; // vertex index or gizmo axis index
   QueryHitType hitType;
+};
+
+// Debug visualization scene
+class DebugVisualizationScene {
+public:
+  DebugVisualizationScene() = default;
+  DebugVisualizationScene(
+      Application& app,
+      GlobalHeap& heap,
+      VkCommandBuffer commandBuffer,
+      const GBufferResources& gBuffer);
+
+  void draw(
+      const Application& app,
+      VkCommandBuffer commandBuffer,
+      const FrameContext& frame,
+      VkDescriptorSet heapSet,
+      UniformHandle globalUniformsHandle,
+      float scale = 1.0f);
+      
+  void reset() { m_lineCount = 0; }
+  bool addLine(const glm::vec3& a, const glm::vec3& b, uint32_t color) {
+    if (m_lineCount < MAX_DBG_LINES) {
+      m_lines.setVertex({a, color}, 2 * m_lineCount);
+      m_lines.setVertex({b, color}, 2 * m_lineCount + 1);
+      ++m_lineCount;
+
+      return true;
+    }
+    return false;
+  }
+
+private:
+  struct DebugVert {
+    alignas(16) glm::vec3 position;
+    alignas(4) uint32_t color;
+  };
+  DynamicVertexBuffer<DebugVert> m_lines;
+  uint32_t m_lineCount = 0;
+
+  RenderPass m_pass;
+  FrameBuffer m_frameBuffer;
 };
 
 // Debug scene elements that are selectable

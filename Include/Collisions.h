@@ -7,6 +7,8 @@
 #include <Althea/BindlessHandle.h>
 #include <Althea/Containers/StridedView.h>
 #include <Althea/FrameContext.h>
+#include <Althea/RenderPass.h>
+#include <Althea/Framebuffer.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
@@ -99,6 +101,7 @@ public:
 
 private:
   Collisions m_collisions;
-  SelectableScene m_scene;
+  
+  DebugVisualizationScene m_dbgViz;
 };
 } // namespace RibCage
