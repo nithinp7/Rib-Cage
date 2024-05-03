@@ -79,7 +79,7 @@ bool pointPointCCD(
     // can't get that close to a triangle without being forced away
     if (dMagSq < EPSILON)
       return false; // ???
-    
+
     n = d / sqrt(dMagSq);
     return true;
   }
@@ -175,7 +175,7 @@ static bool edgeEdgeCCD(
     float& u,
     float& v,
     glm::vec3& n) {
-  
+
   // Find closest pair of points on each line at t0
 
   glm::vec3 ab = b0 - a0;
@@ -185,22 +185,22 @@ static bool edgeEdgeCCD(
 
   glm::vec3 ca = a0 - c0;
 
-  // Want argmin(u,v) ||a + abu - c - cdv||^2 
+  // Want argmin(u,v) ||a + abu - c - cdv||^2
   // where u and v are clamped to [0,1]
   // Solve unconstrained minimization first, then clamp u
   // then recompute v, then clamp v.
   // TODO: Is the above a bad assumption??
-  
+
   // For given u, corresponding v is computed as follows
   // v = (ca + ab u) * cd / ||cd||
 
   // TODO: Need to document offline notes behind this equation
-  glm::vec3 A = glm::dot(ab, cdNorm) * (cd - ab);
-  glm::vec3 B = glm::dot(ca, cdNorm) * cd - ca;
+  glm::vec3 A = glm::dot(ab, cdNorm) * -cd + ab;
+  glm::vec3 B = glm::dot(ca, cdNorm) * -cd + ca;
 
   // argmin(u) ||Au + B||^2
   // 0 = 2 ||A||^2 u + 2 A * B
-  u = -glm::dot(A,B)/glm::dot(A,A); // TODO: Degenerate case handling...
+  u = -glm::dot(A, B) / glm::dot(A, A); // TODO: Degenerate case handling...
   u = glm::clamp(u, 0.0f, 1.0f); // TODO: Clamp before or after computing v??
 
   v = glm::dot(ca + ab * u, cdNorm) / cdMag;
@@ -328,6 +328,39 @@ void Collisions::update(
 
   ALTHEA_STACK_VECTOR(filteredCollisions, const AABBLeaf*, 256);
 
+  uint32_t edgeHashMapCount = 8192;
+  struct EdgeHashMapSlot {
+    uint32_t a;
+    uint32_t b;
+
+    bool isEmpty() const { return a == 0 && b == 0; }
+  };
+  EdgeHashMapSlot* edgeHashMap =
+      (EdgeHashMapSlot*)alloca(sizeof(EdgeHashMapSlot) * edgeHashMapCount);
+  memset(edgeHashMap, 0, edgeHashMapCount * sizeof(EdgeHashMapSlot));
+
+  auto hashEdge = [](uint32_t a, uint32_t b) -> uint32_t {
+    // From Mathias Muller
+    return (a * 92837111) ^ (b * 689287499) ^ ((a + b) * 283923481);
+  };
+  auto edgeHashInsert = [&](uint32_t a, uint32_t b) -> bool {
+    // should be order invariant
+    if (b > a)
+      std::swap(a, b);
+
+    uint32_t slotIdx = hashEdge(a, b) % edgeHashMapCount;
+    
+    while (!edgeHashMap[slotIdx].isEmpty()) {
+      if (edgeHashMap[slotIdx].a == a && edgeHashMap[slotIdx].b == b) {
+        return false; // already exists can't insert
+      }
+      slotIdx = (slotIdx + 1) % edgeHashMapCount;
+    }
+
+    edgeHashMap[slotIdx] = {a, b};
+    return true;
+  };
+
   float thresholdDistSq = thresholdDistance * thresholdDistance;
 
   for (uint32_t leafIdxA = 0; leafIdxA < aabb.getLeafCount(); ++leafIdxA) {
@@ -427,6 +460,9 @@ void Collisions::update(
           }
         }
 
+        if (leafA->triIdx <= leafB->triIdx)
+          continue;
+
         // Check every combination of lines
         for (uint32_t i = 0; i < 3; ++i) {
           for (uint32_t j = 0; j < 3; ++j) {
@@ -454,6 +490,10 @@ void Collisions::update(
                     u,
                     v,
                     n))
+              continue;
+            
+            // todo: improve hashing
+            if (!edgeHashInsert(ia ^ ib, ic ^ id))
               continue;
 
             EdgeCollision& c = m_edgeCollisions.emplace_back();
@@ -554,11 +594,11 @@ void CollisionsManager::update(
         }
       } else {
         for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
-          const glm::vec3& a = 
+          const glm::vec3& a =
               positions[indices[3 * col.triangleAIdx + col.edgeAIdx]];
           const glm::vec3& b =
               positions[indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3]];
-          const glm::vec3& c = 
+          const glm::vec3& c =
               positions[indices[3 * col.triangleBIdx + col.edgeBIdx]];
           const glm::vec3& d =
               positions[indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]];
@@ -570,7 +610,7 @@ void CollisionsManager::update(
           uint32_t green = 0x00ff00ff;
           m_dbgViz.addLine(a, b, green);
           m_dbgViz.addLine(c, d, green);
-          
+
           // computed closest distance in red
           uint32_t red = 0xff0000ff;
           m_dbgViz.addLine(p0, p1, red);

@@ -64,8 +64,8 @@ uvec2 seed;
 
 #define ENABLE_SSAO
 #ifdef ENABLE_SSAO 
-#define SSAO_RAY_COUNT 12
-#define SSAO_RAYMARCH_STEPS 4
+#define SSAO_RAY_COUNT 4
+#define SSAO_RAYMARCH_STEPS 12
 float computeSSAO(vec2 currentUV, vec3 worldPos, vec3 normal) {
   
   // vec4 projected = globals.projection * globals.view * vec4(rayDir, 0.0);
@@ -164,7 +164,7 @@ void main() {
   vec3 irradianceColor = sampleIrrMap(normal);
 
 #ifdef ENABLE_SSAO
-  float occlusion = computeSSAO(uv, position.xyz, normal);
+  float occlusion = 1.;//computeSSAO(uv, position.xyz + normal * 0.001, normal);
 #endif
 
   vec3 material = 
