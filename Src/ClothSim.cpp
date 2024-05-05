@@ -172,10 +172,13 @@ static int s_stepFrameCounter = 0;
 
 static bool s_bDebugColoring = false;
 
+static int s_solverMode = 1;
+static int s_cgIters = 10;
+
 static int s_solverSubsteps = 1;
 static float s_maxSpeed = 0.1f;
-static float s_damping = 0.02f;
-static float s_k = 0.125f;
+static float s_damping = 0.0f;// 0.02f;
+static float s_k = 1.0f;// 0.125f;
 static float s_collisionStrength = 1.0f;
 static float s_gravity = 1.0f;
 
@@ -203,7 +206,88 @@ void ClothSim::_updateConstraints() {
   }
 }
 
-void ClothSim::_pgsSolve() {
+float ClothSim::_computeConstraintResiduals(
+    StackVector<glm::vec3>& residual,
+    StackVector<float>& wSum) const {
+  // TODO: Add collision constraints...
+
+  if (s_fixTop) {
+    for (const FixedPositionConstraint& c : m_clothTop) {
+      const glm::vec3& nodePos = m_nodePositions.getVertex(c.nodeIdx);
+      glm::vec3 err = s_k * (c.position - nodePos);
+      residual[c.nodeIdx] += err;
+      wSum[c.nodeIdx] += s_k;
+    }
+  }
+
+  if (s_fixBottom) {
+    for (const FixedPositionConstraint& c : m_clothBottom) {
+      const glm::vec3& nodePos = m_nodePositions.getVertex(c.nodeIdx);
+      glm::vec3 err = s_k * (c.position - nodePos);
+      residual[c.nodeIdx] += err;
+      wSum[c.nodeIdx] += s_k;
+    }
+  }
+
+  for (const DistanceConstraint& c : m_distanceConstraints) {
+    const glm::vec3& a = m_nodePositions.getVertex(c.a);
+    const glm::vec3& b = m_nodePositions.getVertex(c.b);
+    glm::vec3 diff = b - a;
+    float dist = glm::length(diff);
+    glm::vec3 err = s_k * (c.restLength / dist - 1.0f) * diff;
+    residual[c.b] += err;
+    residual[c.a] -= err;
+    wSum[c.a] += s_k;
+    wSum[c.b] += s_k;
+  }
+
+  float rNormSq = 0.0f;
+  for (const glm::vec3& res : residual)
+    rNormSq += glm::dot(res, res);
+
+  return rNormSq;
+}
+
+void ClothSim::_conjugateGradientSolve() {
+  // Only dist constraints for now...
+
+  uint32_t nodeCount = SHEET_WIDTH * SHEET_WIDTH;
+
+  ALTHEA_STACK_VECTOR(searchDir, glm::vec3, nodeCount);
+  searchDir.resize(nodeCount);
+  ALTHEA_STACK_VECTOR(residual, glm::vec3, nodeCount);
+  residual.resize(nodeCount);
+
+  // Diagonal matrix of the sum of all constraint weights
+  // applied to a single node
+  ALTHEA_STACK_VECTOR(wSum, float, nodeCount);
+  wSum.resize(nodeCount);
+
+  float resNormSq = _computeConstraintResiduals(residual, wSum);
+  float lastResNormSq = resNormSq;
+
+  for (uint32_t cgIter = 0; cgIter < s_cgIters; ++cgIter) {
+    // TODO: Update search dir...
+    float stepSize = 1.0f / s_cgIters;
+
+    // Gradient descent
+    for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+      glm::vec3& nodePos = m_nodePositions.getVertex(nodeIdx);
+      nodePos += stepSize * residual[nodeIdx];
+      // searchDir[nodeIdx];
+    }
+
+    wSum.clear();
+    wSum.resize(nodeCount);
+    residual.clear();
+    residual.resize(nodeCount);
+
+    lastResNormSq = resNormSq;
+    resNormSq = _computeConstraintResiduals(residual, wSum);
+  }
+}
+
+void ClothSim::_projectedGaussSeidelSolve() {
   const std::vector<uint32_t>& indices =
       m_clothSections[0].indices.getIndices();
 
@@ -343,7 +427,10 @@ void ClothSim::update(const FrameContext& frame) {
       pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
     }
 
-    _pgsSolve();
+    if (s_solverMode == 0)
+      _projectedGaussSeidelSolve();
+    else if (s_solverMode == 1)
+      _conjugateGradientSolve();
   }
 
   m_nodePositions.upload(frame.frameRingBufferIndex);
@@ -453,6 +540,18 @@ void ClothSim::updateUI() {
 
     ImGui::Text("Resolve Collisions:");
     ImGui::Checkbox("##resolvecollisions", &s_resolveCollisions);
+
+    if (ImGui::CollapsingHeader("Solver", ImGuiTreeNodeFlags_DefaultOpen)) {
+      const char* solverModes[] = {
+          "Projected Gauss-Seidel",
+          "Conjugated Gradient Descent"};
+      ImGui::Text("Solver Mode:");
+      ImGui::Combo("##solvermode", &s_solverMode, solverModes, 2);
+      if (s_solverMode == 1) {
+        ImGui::Text("CG Iters:");
+        ImGui::SliderInt("##cgiters", &s_cgIters, 1, 20);
+      }
+    }
 
     if (ImGui::CollapsingHeader(
             "Constraints",

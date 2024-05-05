@@ -6,6 +6,7 @@
 #include <Althea/Application.h>
 #include <Althea/BufferHeap.h>
 #include <Althea/ComputePipeline.h>
+#include <Althea/Containers/StackVector.h>
 #include <Althea/DeferredRendering.h>
 #include <Althea/DynamicVertexBuffer.h>
 #include <Althea/GlobalHeap.h>
@@ -15,7 +16,6 @@
 #include <Althea/StructuredBuffer.h>
 #include <Althea/TransientUniforms.h>
 #include <glm/glm.hpp>
-
 #include <gsl/span>
 
 #include <cstdint>
@@ -85,8 +85,13 @@ public:
 private:
   void _updateConstraints();
 
-  void _pgsSolve();
-  
+  float _computeConstraintResiduals(
+      StackVector<glm::vec3>& residual,
+      StackVector<float>& wSum) const;
+
+  void _conjugateGradientSolve();
+  void _projectedGaussSeidelSolve();
+
   TransientUniforms<ClothUniforms> m_uniforms;
 
   RenderPass m_renderPass;
