@@ -161,8 +161,52 @@ static void computeBarycentrics(
   b2rw_t1[0] = b1 - a1;
   b2rw_t1[1] = c1 - a1;
 }
-
 static bool edgeEdgeCCD(
+    const glm::vec3& a0,
+    const glm::vec3& a1,
+    const glm::vec3& b0,
+    const glm::vec3& b1,
+    const glm::vec3& c0,
+    const glm::vec3& c1,
+    const glm::vec3& d0,
+    const glm::vec3& d1,
+    float thresholdDistanceSq,
+    float& u,
+    float& v,
+    glm::vec3& n) {
+
+  // Find closest pair of points on each line at t0
+
+  glm::vec3 ab = b0 - a0;
+  glm::vec3 cd = d0 - c0;
+
+  // 3 rows by 2 columns
+  glm::mat2x3 A(ab, -cd);
+  glm::vec3 B = a0 - c0;
+
+  glm::mat3x2 At = glm::transpose(A);
+  glm::mat2 AtA = At * A; // TODO: Handle degenerate ranks
+  
+  // pseudo-inverse
+  glm::vec2 x = -glm::inverse(AtA) * At * B;
+  u = glm::clamp(x.x, 0.0f, 1.0f);  
+  v = glm::clamp(x.y, 0.0f, 1.0f);  
+
+  glm::vec3 closestPoint_ab_t0 = glm::mix(a0, b0, u);
+  glm::vec3 closestPoint_ab_t1 = glm::mix(a1, b1, u);
+  glm::vec3 closestPoint_cd_t0 = glm::mix(c0, d0, v);
+  glm::vec3 closestPoint_cd_t1 = glm::mix(c1, d1, v);
+
+  return pointPointCCD(
+      closestPoint_ab_t0,
+      closestPoint_ab_t1,
+      closestPoint_cd_t0,
+      closestPoint_cd_t1,
+      thresholdDistanceSq,
+      n);
+}
+
+static bool edgeEdgeCCD2(
     const glm::vec3& a0,
     const glm::vec3& a1,
     const glm::vec3& b0,
@@ -222,7 +266,7 @@ static bool edgeEdgeCCD(
       n);
 }
 
-static bool edgeEdgeCCD2(
+static bool edgeEdgeCCD3(
     const glm::vec3& a0,
     const glm::vec3& a1,
     const glm::vec3& b0,
@@ -310,10 +354,11 @@ static bool edgeEdgeCCD2(
       n);
 }
 
+bool s_dedupEdgeCollisions = true;
 int s_collisionMode = 0;
 float s_thresholdDistance = 0.1f;
 bool s_bVisualizeCollisions = true;
-int s_visualizationMode = 0;
+int s_visualizationMode = 2;
 
 void Collisions::update(
     const StridedView<uint32_t>& indices,
@@ -330,34 +375,42 @@ void Collisions::update(
 
   uint32_t edgeHashMapCount = 8192;
   struct EdgeHashMapSlot {
-    uint32_t a;
-    uint32_t b;
+    uint32_t x;
+    uint32_t y;
 
-    bool isEmpty() const { return a == 0 && b == 0; }
+    bool isEmpty() const { return x == 0 && y == 0; }
   };
   EdgeHashMapSlot* edgeHashMap =
       (EdgeHashMapSlot*)alloca(sizeof(EdgeHashMapSlot) * edgeHashMapCount);
   memset(edgeHashMap, 0, edgeHashMapCount * sizeof(EdgeHashMapSlot));
 
-  auto hashEdge = [](uint32_t a, uint32_t b) -> uint32_t {
+  auto hashEdge = [](uint32_t x, uint32_t y) -> uint32_t {
     // From Mathias Muller
-    return (a * 92837111) ^ (b * 689287499) ^ ((a + b) * 283923481);
+    return (x * 92837111) ^ (y * 689287499) ^ ((x + y) * 283923481);
   };
-  auto edgeHashInsert = [&](uint32_t a, uint32_t b) -> bool {
-    // should be order invariant
+  auto edgeHashInsert = [&](uint32_t a, uint32_t b, uint32_t c, uint32_t d) -> bool {
+    // impose ordering
     if (b > a)
       std::swap(a, b);
+    if (d > c)
+      std::swap(c, d);
 
-    uint32_t slotIdx = hashEdge(a, b) % edgeHashMapCount;
+    uint32_t x = a << 16 | b;
+    uint32_t y = c << 16 | d;
+
+    if (y > x)
+      std::swap(x, y);
+
+    uint32_t slotIdx = hashEdge(x, y) % edgeHashMapCount;
     
     while (!edgeHashMap[slotIdx].isEmpty()) {
-      if (edgeHashMap[slotIdx].a == a && edgeHashMap[slotIdx].b == b) {
+      if (edgeHashMap[slotIdx].x == x && edgeHashMap[slotIdx].y == y) {
         return false; // already exists can't insert
       }
       slotIdx = (slotIdx + 1) % edgeHashMapCount;
     }
 
-    edgeHashMap[slotIdx] = {a, b};
+    edgeHashMap[slotIdx] = {x, y};
     return true;
   };
 
@@ -492,8 +545,7 @@ void Collisions::update(
                     n))
               continue;
             
-            // todo: improve hashing
-            if (!edgeHashInsert(ia ^ ib, ic ^ id))
+            if (s_dedupEdgeCollisions && !edgeHashInsert(ia, ib, ic, id))
               continue;
 
             EdgeCollision& c = m_edgeCollisions.emplace_back();
@@ -561,14 +613,18 @@ void CollisionsManager::updateUI() {
         0.01f,
         0.5f);
 
+    ImGui::Text("Dedup Edge Pairs:");
+    ImGui::SameLine();
+    ImGui::Checkbox("##dedupedges", &s_dedupEdgeCollisions);
+
     ImGui::Separator();
     ImGui::Text("Show Contacts:");
     ImGui::SameLine();
     ImGui::Checkbox("##visualizecollisions", &s_bVisualizeCollisions);
-    static const char* modes[] = {"Edge-Edge", "Point-Triangle"};
+    static const char* modes[] = {"Edge-Edge", "Point-Triangle", "Both"};
     ImGui::Text("Viz Mode:");
     ImGui::SameLine();
-    ImGui::Combo("##visualizationmode", &s_visualizationMode, modes, 2);
+    ImGui::Combo("##visualizationmode", &s_visualizationMode, modes, 3);
     ImGui::Unindent();
   }
 }
@@ -586,13 +642,30 @@ void CollisionsManager::update(
     m_dbgViz.reset();
 
     if (s_collisionMode == 0) {
-      if (s_visualizationMode == 1) {
+      if (s_visualizationMode == 1 || s_visualizationMode == 2) {
         for (const PointTriangleCollision& col :
              m_collisions.getTriangleCollisions()) {
           const glm::vec3& p = positions[col.pointIdx];
+          const glm::vec3& a = positions[indices[3 * col.triangleIdx + 0]];
+          const glm::vec3& b = positions[indices[3 * col.triangleIdx + 1]];
+          const glm::vec3& c = positions[indices[3 * col.triangleIdx + 2]];
+          
+          glm::vec3 ap = p - a;
+          glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
+          glm::vec3 projP = p - glm::dot(ap, n) * n;
+
           // m_scene.addVertex(p); // TODO!!!
+          uint32_t orange = 0xffaa00ff;
+          m_dbgViz.addLine(p, projP, orange);
+
+          uint32_t purple = 0xff00ffff;
+          m_dbgViz.addLine(a, b, purple);
+          m_dbgViz.addLine(b, c, purple);
+          m_dbgViz.addLine(c, a, purple);
         }
-      } else {
+      }
+      
+      if (s_visualizationMode == 0 || s_visualizationMode == 2) {
         for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
           const glm::vec3& a =
               positions[indices[3 * col.triangleAIdx + col.edgeAIdx]];
