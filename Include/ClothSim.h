@@ -16,6 +16,8 @@
 #include <Althea/TransientUniforms.h>
 #include <glm/glm.hpp>
 
+#include <gsl/span>
+
 #include <cstdint>
 #include <vector>
 
@@ -52,6 +54,11 @@ struct DistanceConstraint {
   float padding;
 };
 
+struct FixedPositionConstraint {
+  alignas(16) glm::vec3 position;
+  alignas(4) uint32_t nodeIdx;
+};
+
 class ClothSim {
 public:
   ClothSim() = default;
@@ -61,20 +68,25 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap);
 
-void tryRecompileShaders(Application& app);
+  void tryRecompileShaders(Application& app);
 
-void update(const FrameContext& frame);
+  void update(const FrameContext& frame);
 
-void draw(
-    const Application& app,
-    VkCommandBuffer commandBuffer,
-    const FrameContext& frame,
-    VkDescriptorSet heapSet,
-    BufferHandle globalResourcesHandle,
-    UniformHandle globalUniformsHandle);
+  void draw(
+      const Application& app,
+      VkCommandBuffer commandBuffer,
+      const FrameContext& frame,
+      VkDescriptorSet heapSet,
+      BufferHandle globalResourcesHandle,
+      UniformHandle globalUniformsHandle);
 
-void updateUI();
+  void updateUI();
+
 private:
+  void _updateConstraints();
+
+  void _pgsSolve();
+  
   TransientUniforms<ClothUniforms> m_uniforms;
 
   RenderPass m_renderPass;
@@ -82,8 +94,12 @@ private:
 
   std::vector<ComputePipeline> m_solvePasses;
 
-  // TODO: These probably need to become paged heaps
-  StructuredBuffer<DistanceConstraint> m_distanceConstraints;
+  // These will eventually be GPU visible
+  std::vector<FixedPositionConstraint> m_positionConstraints;
+  gsl::span<FixedPositionConstraint> m_clothTop;
+  gsl::span<FixedPositionConstraint> m_clothBottom;
+
+  std::vector<DistanceConstraint> m_distanceConstraints;
   std::vector<glm::vec3> m_prevPositions;
 
   DynamicVertexBuffer<glm::vec3> m_nodePositions;

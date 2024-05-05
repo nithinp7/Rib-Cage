@@ -62,10 +62,6 @@ ClothSim::ClothSim(
 
   // Resources
   {
-    m_distanceConstraints =
-        StructuredBuffer<DistanceConstraint>(app, MAX_DISTANCE_CONSTRAINTS);
-    m_distanceConstraints.registerToHeap(heap);
-
     m_nodePositions = DynamicVertexBuffer<glm::vec3>(app, MAX_NODES, true);
     m_nodePositions.registerToHeap(heap);
 
@@ -82,6 +78,7 @@ ClothSim::ClothSim(
     float cellDiagonal = cellSize * glm::sqrt(2.0f);
 
     uint32_t width = SHEET_WIDTH;
+
     for (uint32_t i = 0; i < width; ++i) {
       for (uint32_t j = 0; j < width; ++j) {
         uint32_t flatIdx = i * width + j;
@@ -92,7 +89,22 @@ ClothSim::ClothSim(
       }
     }
 
-    uint32_t distConstraintCount = 0;
+    m_positionConstraints.resize(2 * width);
+    m_clothTop = gsl::span(&m_positionConstraints[0], width);
+    for (uint32_t i = 0; i < width; ++i) {
+      FixedPositionConstraint& c = m_clothTop[i];
+      c.nodeIdx = i * width;
+      c.position = m_prevPositions[c.nodeIdx];
+    }
+
+    m_clothBottom = gsl::span(&m_positionConstraints[width], width);
+    for (uint32_t i = 0; i < width; ++i) {
+      FixedPositionConstraint& c = m_clothBottom[i];
+      c.nodeIdx = i * width + width - 1;
+      c.position = m_prevPositions[c.nodeIdx];
+    }
+
+    m_distanceConstraints.reserve(MAX_DISTANCE_CONSTRAINTS);
 
     // Setup indices
     std::vector<uint32_t> indices;
@@ -114,30 +126,23 @@ ClothSim::ClothSim(
         indices.push_back(idx3);
 
         if (i == 0)
-          m_distanceConstraints.setElement(
-              DistanceConstraint{idx0, idx1, cellSize, 0.0f},
-              distConstraintCount++);
+          m_distanceConstraints.push_back(
+              DistanceConstraint{idx0, idx1, cellSize, 0.0f});
         if (j == 0)
-          m_distanceConstraints.setElement(
-              DistanceConstraint{idx0, idx3, cellSize, 0.0f},
-              distConstraintCount++);
+          m_distanceConstraints.push_back(
+              DistanceConstraint{idx0, idx3, cellSize, 0.0f});
 
-        m_distanceConstraints.setElement(
-            DistanceConstraint{idx1, idx2, cellSize, 0.0f},
-            distConstraintCount++);
-        m_distanceConstraints.setElement(
-            DistanceConstraint{idx2, idx3, cellSize, 0.0f},
-            distConstraintCount++);
+        m_distanceConstraints.push_back(
+            DistanceConstraint{idx1, idx2, cellSize, 0.0f});
+        m_distanceConstraints.push_back(
+            DistanceConstraint{idx2, idx3, cellSize, 0.0f});
 
-        m_distanceConstraints.setElement(
-            DistanceConstraint{idx0, idx2, cellDiagonal, 0.0f},
-            distConstraintCount++);
-        m_distanceConstraints.setElement(
-            DistanceConstraint{idx1, idx3, cellDiagonal, 0.0f},
-            distConstraintCount++);
+        m_distanceConstraints.push_back(
+            DistanceConstraint{idx0, idx2, cellDiagonal, 0.0f});
+        m_distanceConstraints.push_back(
+            DistanceConstraint{idx1, idx3, cellDiagonal, 0.0f});
       }
     }
-    m_distanceConstraints.upload(app, commandBuffer);
 
     ClothSection& section = m_clothSections.emplace_back();
     section.indices =
@@ -181,10 +186,140 @@ static bool s_fixTop = true;
 static bool s_fixBottom = true;
 static float s_twist = 0.0f;
 
+void ClothSim::_updateConstraints() {
+  uint32_t width = SHEET_WIDTH;
+  float cellSize = 1.0f;
+
+  // Fixed bottom row
+  glm::vec3 targetCenter(0.5f * width * cellSize, 0.0f, (width - 1) * cellSize);
+  float theta = s_twist * 2.0f * glm::pi<float>();
+  float cosTheta = glm::cos(theta);
+  float sinTheta = glm::sin(theta);
+
+  for (uint32_t i = 0; i < width; ++i) {
+    FixedPositionConstraint& c = m_clothBottom[i];
+    float x = i * cellSize - 0.5f * width;
+    c.position = targetCenter + glm::vec3(cosTheta * x, sinTheta * x, 0.0f);
+  }
+}
+
+void ClothSim::_pgsSolve() {
+  const std::vector<uint32_t>& indices =
+      m_clothSections[0].indices.getIndices();
+
+  for (uint32_t solverStep = 0; solverStep < s_solverSubsteps; ++solverStep) {
+    if (s_fixTop) {
+      for (const FixedPositionConstraint& c : m_clothTop) {
+        glm::vec3& pos = m_nodePositions.getVertex(c.nodeIdx);
+        glm::vec3 diff = c.position - pos;
+        pos += s_k * diff;
+      }
+    }
+
+    if (s_fixBottom) {
+      for (const FixedPositionConstraint& c : m_clothBottom) {
+        glm::vec3& pos = m_nodePositions.getVertex(c.nodeIdx);
+        glm::vec3 diff = c.position - pos;
+        pos += s_k * diff;
+      }
+    }
+
+    for (const DistanceConstraint& c : m_distanceConstraints) {
+      glm::vec3& p0 = m_nodePositions.getVertex(c.a);
+      glm::vec3& p1 = m_nodePositions.getVertex(c.b);
+
+      glm::vec3 diff = p1 - p0;
+      float dist = glm::length(diff);
+      diff /= dist;
+
+      // if (dist < c.restLength && dist > 0.5f * c.restLength)
+      //   continue;
+
+      if (dist < 0.000001f)
+        diff = glm::vec3(1.0f, 0.0f, 0.0f);
+
+      glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
+      p0 -= disp;
+      p1 += disp;
+    }
+
+    // Collisions
+    if (s_resolveCollisions) {
+
+      float thresholdDistance = m_collisions.getThresholdDistance();
+
+      for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
+        for (const PointTriangleCollision& col :
+             m_collisions.getCollisions().getTriangleCollisions()) {
+          glm::vec3& a =
+              m_nodePositions.getVertex(indices[3 * col.triangleIdx + 0]);
+          glm::vec3& b =
+              m_nodePositions.getVertex(indices[3 * col.triangleIdx + 1]);
+          glm::vec3& c =
+              m_nodePositions.getVertex(indices[3 * col.triangleIdx + 2]);
+          glm::vec3& p = m_nodePositions.getVertex(col.pointIdx);
+
+          glm::vec3 ab = b - a;
+          glm::vec3 ac = c - a;
+          glm::vec3 ap = p - a;
+
+          // TODO: handle degenerate case
+
+          glm::vec3 n = glm::normalize(glm::cross(ab, ac));
+          if (col.bBackFace)
+            n = -n;
+
+          float d = glm::dot(ap, n);
+          if (d < thresholdDistance) {
+            glm::vec3 diff =
+                0.25f * s_collisionStrength * (thresholdDistance - d) * n;
+
+            p += 3.0f * diff;
+            a -= diff;
+            b -= diff;
+            c -= diff;
+          }
+        }
+
+        for (const EdgeCollision& col :
+             m_collisions.getCollisions().getEdgeCollisions()) {
+          glm::vec3& a = m_nodePositions.getVertex(
+              indices[3 * col.triangleAIdx + col.edgeAIdx]);
+          glm::vec3& b = m_nodePositions.getVertex(
+              indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3]);
+          glm::vec3& c = m_nodePositions.getVertex(
+              indices[3 * col.triangleBIdx + col.edgeBIdx]);
+          glm::vec3& d = m_nodePositions.getVertex(
+              indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]);
+
+          glm::vec3 sep = glm::mix(c, d, col.v) - glm::mix(a, b, col.u);
+
+          float sepDist = glm::dot(sep, col.normal);
+
+          if (sepDist < thresholdDistance) {
+            glm::vec3 diff = 0.5f * s_collisionStrength *
+                             (thresholdDistance - sepDist) * col.normal;
+            a -= diff * (1.0f - col.u);
+            b -= diff * col.u;
+            c += diff * (1.0f - col.v);
+            d += diff * col.v;
+          }
+        }
+      }
+    }
+  }
+}
+
 void ClothSim::update(const FrameContext& frame) {
   const std::vector<uint32_t>& indices =
       m_clothSections[0].indices.getIndices();
 
+  uint32_t width = SHEET_WIDTH;
+  float cellSize = 1.0f;
+
+  _updateConstraints();
+
+  // Iterative solver
   if (!s_simPaused || s_stepFrameCounter > 0) {
     if (s_stepFrameCounter > 0)
       --s_stepFrameCounter;
@@ -208,129 +343,7 @@ void ClothSim::update(const FrameContext& frame) {
       pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
     }
 
-    for (uint32_t solverStep = 0; solverStep < s_solverSubsteps; ++solverStep) {
-      // TODO: Not actually the right number of dist constraints...
-      for (uint32_t constraintIdx = 0;
-           constraintIdx < m_distanceConstraints.getCount();
-           ++constraintIdx) {
-        const DistanceConstraint& c =
-            m_distanceConstraints.getElement(constraintIdx);
-        glm::vec3& p0 = m_nodePositions.getVertex(c.a);
-        glm::vec3& p1 = m_nodePositions.getVertex(c.b);
-
-        glm::vec3 diff = p1 - p0;
-        float dist = glm::length(diff);
-        diff /= dist;
-
-        // if (dist < c.restLength && dist > 0.5f * c.restLength)
-        //   continue;
-
-        if (dist < 0.000001f)
-          diff = glm::vec3(1.0f, 0.0f, 0.0f);
-
-        glm::vec3 disp = 0.5f * s_k * (c.restLength - dist) * diff;
-        p0 -= disp;
-        p1 += disp;
-      }
-
-      uint32_t width = SHEET_WIDTH;
-      float cellSize = 1.0f;
-      // Fixed top row
-      if (s_fixTop) {
-        for (uint32_t nodeIdx = 0; nodeIdx < width; ++nodeIdx) {
-          glm::vec3 target(nodeIdx * cellSize, 0.0f, 0.0f);
-          glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-          glm::vec3 diff = target - pos;
-          pos += s_k * diff;
-        }
-      }
-
-      // Fixed bottom row
-      if (s_fixBottom) {
-        glm::vec3 targetCenter(
-            0.5f * width * cellSize,
-            0.0f,
-            (width - 1) * cellSize);
-        float theta = s_twist * 2.0f * glm::pi<float>();
-        float cosTheta = glm::cos(theta);
-        float sinTheta = glm::sin(theta);
-
-        for (uint32_t i = 0; i < width; ++i) {
-          uint32_t nodeIdx = width * (width - 1) + i;
-          float x = i * cellSize - 0.5f * width;
-          glm::vec3 target =
-              targetCenter + glm::vec3(cosTheta * x, sinTheta * x, 0.0f);
-          glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-          glm::vec3 diff = target - pos;
-          pos += s_k * diff;
-        }
-      }
-
-      // Collisions
-      if (s_resolveCollisions) {
-
-        float thresholdDistance = m_collisions.getThresholdDistance();
-
-        for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
-          for (const PointTriangleCollision& col :
-               m_collisions.getCollisions().getTriangleCollisions()) {
-            glm::vec3& a =
-                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 0]);
-            glm::vec3& b =
-                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 1]);
-            glm::vec3& c =
-                m_nodePositions.getVertex(indices[3 * col.triangleIdx + 2]);
-            glm::vec3& p = m_nodePositions.getVertex(col.pointIdx);
-
-            glm::vec3 ab = b - a;
-            glm::vec3 ac = c - a;
-            glm::vec3 ap = p - a;
-
-            // TODO: handle degenerate case
-
-            glm::vec3 n = glm::normalize(glm::cross(ab, ac));
-            if (col.bBackFace)
-              n = -n;
-
-            float d = glm::dot(ap, n);
-            if (d < thresholdDistance) {
-              glm::vec3 diff =
-                  0.25f * s_collisionStrength * (thresholdDistance - d) * n;
-
-              p += 3.0f * diff;
-              a -= diff;
-              b -= diff;
-              c -= diff;
-            }
-          }
-
-          for (const EdgeCollision& col :
-               m_collisions.getCollisions().getEdgeCollisions()) {
-            glm::vec3& a = m_nodePositions.getVertex(
-                indices[3 * col.triangleAIdx + col.edgeAIdx]);
-            glm::vec3& b = m_nodePositions.getVertex(
-                indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3]);
-            glm::vec3& c = m_nodePositions.getVertex(
-                indices[3 * col.triangleBIdx + col.edgeBIdx]);
-            glm::vec3& d = m_nodePositions.getVertex(
-                indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3]);
-
-            glm::vec3 sep = glm::mix(c, d, col.v) - glm::mix(a, b, col.u);
-
-            float sepDist = glm::dot(sep, col.normal);
-
-            if (sepDist < thresholdDistance) {
-              glm::vec3 diff =  0.5f * s_collisionStrength *
-                               (thresholdDistance - sepDist) * col.normal;
-              a -= diff * (1.0f - col.u);
-              b -= diff * col.u;
-              c += diff * (1.0f - col.v);
-              d += diff * col.v;
-            }
-          }
-        }
-      }
-    }
+    _pgsSolve();
   }
 
   m_nodePositions.upload(frame.frameRingBufferIndex);
@@ -384,7 +397,7 @@ void ClothSim::draw(
     uniforms.nodeFlags =
         m_nodeFlags.getCurrentBufferHandle(frame.frameRingBufferIndex).index;
 
-    uniforms.distanceConstraints = m_distanceConstraints.getHandle().index;
+    uniforms.distanceConstraints = INVALID_BINDLESS_HANDLE;
     uniforms.distanceConstraintsCount = MAX_DISTANCE_CONSTRAINTS;
 
     m_uniforms.updateUniforms(uniforms, frame);

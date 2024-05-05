@@ -403,10 +403,16 @@ void Collisions::update(
 
     uint32_t slotIdx = hashEdge(x, y) % edgeHashMapCount;
     
+    uint32_t loopCount = 0;
     while (!edgeHashMap[slotIdx].isEmpty()) {
       if (edgeHashMap[slotIdx].x == x && edgeHashMap[slotIdx].y == y) {
         return false; // already exists can't insert
       }
+
+      // saturated hashmap, give-up de-duplication without inserting
+      if (loopCount++ > edgeHashMapCount)
+        return true;
+      
       slotIdx = (slotIdx + 1) % edgeHashMapCount;
     }
 

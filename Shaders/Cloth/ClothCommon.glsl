@@ -37,6 +37,7 @@ BUFFER_RW_PACKED(_nodeFlags, NodeFlags{
 });
 #define getNodeFlags(nodeIdx) _nodeFlags[clothUniforms.nodeFlags].flags[nodeIdx]
 
+/*
 struct DistanceConstraint {
   uint a;
   uint b;
@@ -49,5 +50,5 @@ BUFFER_RW(_distanceConstraints, DistanceConstraintHeap{
 });
 #define getDistanceConstraint(idx) \
     _distanceConstraints[clothUniforms.distanceConstraints].constraints[idx]
-
+*/
 #endif // _CLOTHCOMMON_
