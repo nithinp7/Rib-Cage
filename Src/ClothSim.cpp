@@ -16,6 +16,21 @@ struct PushConstants {
   uint32_t clothUniforms;
 };
 
+void ClothSim::_resetPositions() {
+  uint32_t width = SHEET_WIDTH;
+  float cellSize = 1.0f;
+
+  for (uint32_t i = 0; i < width; ++i) {
+    for (uint32_t j = 0; j < width; ++j) {
+      uint32_t flatIdx = i * width + j;
+      glm::vec3 position = glm::vec3(i * cellSize, 0.0f, j * cellSize);
+
+      m_nodePositions.setVertex(position, flatIdx);
+      m_prevPositions[flatIdx] = position;
+    }
+  }
+}
+
 ClothSim::ClothSim(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
@@ -79,15 +94,7 @@ ClothSim::ClothSim(
 
     uint32_t width = SHEET_WIDTH;
 
-    for (uint32_t i = 0; i < width; ++i) {
-      for (uint32_t j = 0; j < width; ++j) {
-        uint32_t flatIdx = i * width + j;
-        glm::vec3 position = glm::vec3(i * cellSize, 0.0f, j * cellSize);
-
-        m_nodePositions.setVertex(position, flatIdx);
-        m_prevPositions[flatIdx] = position;
-      }
-    }
+    _resetPositions();
 
     m_positionConstraints.resize(2 * width);
     m_clothTop = gsl::span(&m_positionConstraints[0], width);
@@ -245,9 +252,47 @@ float ClothSim::_computeConstraintResiduals(
     wSum[c.b] += s_k;
   }
 
-  // TODO: Point-triangle constraints...
   if (s_resolveCollisions) {
     float thresholdDistance = m_collisions.getThresholdDistance();
+    for (const PointTriangleCollision& col :
+         m_collisions.getCollisions().getTriangleCollisions()) {
+      uint32_t ia = indices[3 * col.triangleIdx + 0];
+      uint32_t ib = indices[3 * col.triangleIdx + 1];
+      uint32_t ic = indices[3 * col.triangleIdx + 2];
+      uint32_t ip = col.pointIdx;
+
+      const glm::vec3& a = m_nodePositions.getVertex(ia);
+      const glm::vec3& b = m_nodePositions.getVertex(ib);
+      const glm::vec3& c = m_nodePositions.getVertex(ic);
+      const glm::vec3& p = m_nodePositions.getVertex(ip);
+
+      glm::vec3 ab = b - a;
+      glm::vec3 ac = c - a;
+      glm::vec3 ap = p - a;
+
+      // TODO: handle degenerate case
+
+      glm::vec3 n = glm::normalize(glm::cross(ab, ac));
+      if (col.bBackFace)
+        n = -n;
+
+      float d = glm::dot(ap, n);
+      if (d < thresholdDistance)
+      {
+        glm::vec3 err = s_collisionStrength * (thresholdDistance - d) * n;
+
+        residual[ip] += err;
+        residual[ia] -= err;
+        residual[ib] -= err;
+        residual[ic] -= err;
+
+        wSum[ip] += s_collisionStrength;
+        wSum[ia] += s_collisionStrength / 3.0f;
+        wSum[ib] += s_collisionStrength / 3.0f;
+        wSum[ic] += s_collisionStrength / 3.0f;
+      }
+    }
+
     for (const EdgeCollision& col :
          m_collisions.getCollisions().getEdgeCollisions()) {
       uint32_t ia = indices[3 * col.triangleAIdx + col.edgeAIdx];
@@ -269,7 +314,8 @@ float ClothSim::_computeConstraintResiduals(
       // this will make the collisions slightly "sticky"
       // This formulation might also cause damping perpendicular to
       // the collision normal
-      if (sepDist < thresholdDistance) {
+      if (sepDist < thresholdDistance)
+      {
         glm::vec3 projDiff = thresholdDistance * col.normal / sepDist;
         // b - Ax
         glm::vec3 err =
@@ -316,6 +362,46 @@ void ClothSim::_computeASearchDir(
   // TODO: Point-triangle constraints...
   if (s_resolveCollisions) {
     float thresholdDistance = m_collisions.getThresholdDistance();
+    for (const PointTriangleCollision& col :
+         m_collisions.getCollisions().getTriangleCollisions()) {
+      uint32_t ia = indices[3 * col.triangleIdx + 0];
+      uint32_t ib = indices[3 * col.triangleIdx + 1];
+      uint32_t ic = indices[3 * col.triangleIdx + 2];
+      uint32_t ip = col.pointIdx;
+
+      const glm::vec3& a = m_nodePositions.getVertex(ia);
+      const glm::vec3& b = m_nodePositions.getVertex(ib);
+      const glm::vec3& c = m_nodePositions.getVertex(ic);
+      const glm::vec3& p = m_nodePositions.getVertex(ip);
+
+      glm::vec3 ab = b - a;
+      glm::vec3 ac = c - a;
+      glm::vec3 ap = p - a;
+
+      // TODO: handle degenerate case
+
+      glm::vec3 n = glm::normalize(glm::cross(ab, ac));
+      if (col.bBackFace)
+        n = -n;
+
+      float d = glm::dot(ap, n);
+      if (d < thresholdDistance)
+      {
+        A_searchDir[ip] -=
+            s_collisionStrength *
+            ((searchDir[ia] + searchDir[ib] + searchDir[ic]) / 3.0f);
+        A_searchDir[ia] +=
+            s_collisionStrength *
+            ((searchDir[ib] + searchDir[ic]) / 3.0f - searchDir[ip]);
+        A_searchDir[ib] +=
+            s_collisionStrength *
+            ((searchDir[ic] + searchDir[ia]) / 3.0f - searchDir[ip]);
+        A_searchDir[ic] +=
+            s_collisionStrength *
+            ((searchDir[ia] + searchDir[ib]) / 3.0f - searchDir[ip]);
+      }
+    }
+
     for (const EdgeCollision& col :
          m_collisions.getCollisions().getEdgeCollisions()) {
       uint32_t ia = indices[3 * col.triangleAIdx + col.edgeAIdx];
@@ -324,7 +410,7 @@ void ClothSim::_computeASearchDir(
       uint32_t id = indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3];
 
       // TODO: Is it bad to disable the collision here on a per-iteration level?
-      
+
       const glm::vec3& a = m_nodePositions.getVertex(ia);
       const glm::vec3& b = m_nodePositions.getVertex(ib);
       const glm::vec3& c = m_nodePositions.getVertex(ic);
@@ -339,7 +425,7 @@ void ClothSim::_computeASearchDir(
       // this will make the collisions slightly "sticky"
       // This formulation might also cause damping perpendicular to
       // the collision normal
-      if (sepDist < thresholdDistance) 
+      if (sepDist < thresholdDistance)
       {
         glm::vec3 mixedDirAb = glm::mix(searchDir[ia], searchDir[ib], col.u);
         glm::vec3 mixedDirCd = glm::mix(searchDir[ic], searchDir[id], col.v);
@@ -399,7 +485,7 @@ void ClothSim::_conjugateGradientSolve() {
       resNormSq += glm::dot(res, res);
     }
 
-    if (resNormSq < 0.000001f)
+    if (resNormSq < 0.00001f)
       break;
 
     float dS = resNormSq / lastResNormSq;
@@ -646,7 +732,10 @@ void ClothSim::draw(
 void ClothSim::updateUI() {
   if (ImGui::CollapsingHeader("Cloth Sim", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Indent();
+    if (ImGui::Button("Reset"))
+      _resetPositions();
     ImGui::Text("Paused:");
+    ImGui::SameLine();
     ImGui::Checkbox("##paused", &s_simPaused);
     ImGui::Text("Step Frames:");
     if (ImGui::Button(">"))

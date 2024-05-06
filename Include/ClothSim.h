@@ -83,6 +83,7 @@ public:
   void updateUI();
 
 private:
+  void _resetPositions();
   void _updateConstraints();
 
   float _computeConstraintResiduals(
