@@ -177,8 +177,8 @@ static int s_cgIters = 10;
 
 static int s_solverSubsteps = 1;
 static float s_maxSpeed = 0.1f;
-static float s_damping = 0.0f;// 0.02f;
-static float s_k = 1.0f;// 0.125f;
+static float s_damping = 0.0f; // 0.02f;
+static float s_k = 1.0f;       // 0.125f;
 static float s_collisionStrength = 1.0f;
 static float s_gravity = 1.0f;
 
@@ -214,7 +214,7 @@ float ClothSim::_computeConstraintResiduals(
   if (s_fixTop) {
     for (const FixedPositionConstraint& c : m_clothTop) {
       const glm::vec3& nodePos = m_nodePositions.getVertex(c.nodeIdx);
-      glm::vec3 err = s_k * (c.position - nodePos);
+      glm::vec3 err = s_k * (c.position - nodePos); // b - Ax
       residual[c.nodeIdx] += err;
       wSum[c.nodeIdx] += s_k;
     }
@@ -223,7 +223,7 @@ float ClothSim::_computeConstraintResiduals(
   if (s_fixBottom) {
     for (const FixedPositionConstraint& c : m_clothBottom) {
       const glm::vec3& nodePos = m_nodePositions.getVertex(c.nodeIdx);
-      glm::vec3 err = s_k * (c.position - nodePos);
+      glm::vec3 err = s_k * (c.position - nodePos); // b - Ax
       residual[c.nodeIdx] += err;
       wSum[c.nodeIdx] += s_k;
     }
@@ -232,9 +232,12 @@ float ClothSim::_computeConstraintResiduals(
   for (const DistanceConstraint& c : m_distanceConstraints) {
     const glm::vec3& a = m_nodePositions.getVertex(c.a);
     const glm::vec3& b = m_nodePositions.getVertex(c.b);
+    // TODO: Should this projDiff be cached off at the start
+    // of the solver iter?
     glm::vec3 diff = b - a;
     float dist = glm::length(diff);
-    glm::vec3 err = s_k * (c.restLength / dist - 1.0f) * diff;
+    glm::vec3 projDiff = c.restLength * diff / dist;
+    glm::vec3 err = s_k * (projDiff - diff); // b - Ax
     residual[c.b] += err;
     residual[c.a] -= err;
     wSum[c.a] += s_k;
@@ -248,42 +251,77 @@ float ClothSim::_computeConstraintResiduals(
   return rNormSq;
 }
 
+void ClothSim::_computeASearchDir(
+    StackVector<glm::vec3>& A_searchDir,
+    const StackVector<glm::vec3>& searchDir,
+    const StackVector<float>& wSum) const {
+  // Multiply-add diagonal elements
+  uint32_t nodeCount = searchDir.size();
+  for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+    A_searchDir[nodeIdx] = wSum[nodeIdx] * searchDir[nodeIdx];
+  }
+
+  // Multiply-subtract off-diagonal elements
+  for (const DistanceConstraint& c : m_distanceConstraints) {
+    const glm::vec3& a = m_nodePositions.getVertex(c.a);
+    const glm::vec3& b = m_nodePositions.getVertex(c.b);
+    // TODO: Should this dist be cached at the start of the solver iter?
+    glm::vec3 diff = b - a;
+    float dist = glm::length(diff);
+    glm::vec3 projDiff = c.restLength * diff / dist;
+    A_searchDir[c.b] -= s_k * searchDir[c.a];
+    A_searchDir[c.a] -= s_k * searchDir[c.b]; // TODO: reinspect signs here...
+  }
+}
+
 void ClothSim::_conjugateGradientSolve() {
   // Only dist constraints for now...
 
   uint32_t nodeCount = SHEET_WIDTH * SHEET_WIDTH;
 
-  ALTHEA_STACK_VECTOR(searchDir, glm::vec3, nodeCount);
-  searchDir.resize(nodeCount);
   ALTHEA_STACK_VECTOR(residual, glm::vec3, nodeCount);
   residual.resize(nodeCount);
+  ALTHEA_STACK_VECTOR(searchDir, glm::vec3, nodeCount);
+  searchDir.resize(nodeCount);
+  ALTHEA_STACK_VECTOR(A_searchDir, glm::vec3, nodeCount);
+  A_searchDir.resize(nodeCount);
 
   // Diagonal matrix of the sum of all constraint weights
   // applied to a single node
   ALTHEA_STACK_VECTOR(wSum, float, nodeCount);
   wSum.resize(nodeCount);
 
-  float resNormSq = _computeConstraintResiduals(residual, wSum);
-  float lastResNormSq = resNormSq;
+  float lastResNormSq = _computeConstraintResiduals(residual, wSum);
+  memcpy(&searchDir[0], &residual[0], sizeof(glm::vec3) * nodeCount);
 
   for (uint32_t cgIter = 0; cgIter < s_cgIters; ++cgIter) {
     // TODO: Update search dir...
-    float stepSize = 1.0f / s_cgIters;
+    _computeASearchDir(A_searchDir, searchDir, wSum);
+    float ptAp = 0.0f;
+    for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx)
+      ptAp += glm::dot(searchDir[nodeIdx], A_searchDir[nodeIdx]);
+    float stepSize = lastResNormSq / ptAp;
 
-    // Gradient descent
+    // Step in search dir
     for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
       glm::vec3& nodePos = m_nodePositions.getVertex(nodeIdx);
-      nodePos += stepSize * residual[nodeIdx];
-      // searchDir[nodeIdx];
+      nodePos += stepSize * searchDir[nodeIdx];
     }
 
-    wSum.clear();
-    wSum.resize(nodeCount);
-    residual.clear();
-    residual.resize(nodeCount);
+    // update residual
+    float resNormSq = 0.0f;
+    for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+      glm::vec3& res = residual[nodeIdx];
+      res -= stepSize * A_searchDir[nodeIdx];
+      resNormSq += glm::dot(res, res);
+    }
+
+    float dS = resNormSq / lastResNormSq;
+    for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+      searchDir[nodeIdx] = residual[nodeIdx] + dS * searchDir[nodeIdx];
+    }
 
     lastResNormSq = resNormSq;
-    resNormSq = _computeConstraintResiduals(residual, wSum);
   }
 }
 

@@ -88,6 +88,10 @@ private:
   float _computeConstraintResiduals(
       StackVector<glm::vec3>& residual,
       StackVector<float>& wSum) const;
+  void _computeASearchDir(
+      StackVector<glm::vec3>& A_searchDir,
+      const StackVector<glm::vec3>& searchDir,
+      const StackVector<float>& wSum) const;
 
   void _conjugateGradientSolve();
   void _projectedGaussSeidelSolve();
