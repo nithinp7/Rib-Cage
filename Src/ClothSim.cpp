@@ -209,7 +209,8 @@ void ClothSim::_updateConstraints() {
 float ClothSim::_computeConstraintResiduals(
     StackVector<glm::vec3>& residual,
     StackVector<float>& wSum) const {
-  // TODO: Add collision constraints...
+  const std::vector<uint32_t>& indices =
+      m_clothSections[0].indices.getIndices();
 
   if (s_fixTop) {
     for (const FixedPositionConstraint& c : m_clothTop) {
@@ -238,10 +239,53 @@ float ClothSim::_computeConstraintResiduals(
     float dist = glm::length(diff);
     glm::vec3 projDiff = c.restLength * diff / dist;
     glm::vec3 err = s_k * (projDiff - diff); // b - Ax
-    residual[c.b] += err;
     residual[c.a] -= err;
+    residual[c.b] += err;
     wSum[c.a] += s_k;
     wSum[c.b] += s_k;
+  }
+
+  // TODO: Point-triangle constraints...
+  if (s_resolveCollisions) {
+    float thresholdDistance = m_collisions.getThresholdDistance();
+    for (const EdgeCollision& col :
+         m_collisions.getCollisions().getEdgeCollisions()) {
+      uint32_t ia = indices[3 * col.triangleAIdx + col.edgeAIdx];
+      uint32_t ib = indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3];
+      uint32_t ic = indices[3 * col.triangleBIdx + col.edgeBIdx];
+      uint32_t id = indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3];
+
+      const glm::vec3& a = m_nodePositions.getVertex(ia);
+      const glm::vec3& b = m_nodePositions.getVertex(ib);
+      const glm::vec3& c = m_nodePositions.getVertex(ic);
+      const glm::vec3& d = m_nodePositions.getVertex(id);
+
+      glm::vec3 sep = glm::mix(c, d, col.v) - glm::mix(a, b, col.u);
+
+      float sepDist = glm::dot(sep, col.normal);
+
+      // TODO: This gets treated as a bilateral constraint correctly
+      // if the contact is in the system matrix at all...
+      // this will make the collisions slightly "sticky"
+      // This formulation might also cause damping perpendicular to
+      // the collision normal
+      if (sepDist < thresholdDistance) {
+        glm::vec3 projDiff = thresholdDistance * col.normal / sepDist;
+        // b - Ax
+        glm::vec3 err =
+            s_collisionStrength * (thresholdDistance - sepDist) * col.normal;
+
+        residual[ia] -= (1.0f - col.u) * err;
+        residual[ib] -= col.u * err;
+        residual[ic] += (1.0f - col.v) * err;
+        residual[id] += col.v * err;
+
+        wSum[ia] += s_collisionStrength * (1.0f - col.u);
+        wSum[ib] += s_collisionStrength * col.u;
+        wSum[ic] += s_collisionStrength * (1.0f - col.v);
+        wSum[id] += s_collisionStrength * col.v;
+      }
+    }
   }
 
   float rNormSq = 0.0f;
@@ -255,22 +299,61 @@ void ClothSim::_computeASearchDir(
     StackVector<glm::vec3>& A_searchDir,
     const StackVector<glm::vec3>& searchDir,
     const StackVector<float>& wSum) const {
+  const std::vector<uint32_t>& indices =
+      m_clothSections[0].indices.getIndices();
   // Multiply-add diagonal elements
   uint32_t nodeCount = searchDir.size();
   for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
     A_searchDir[nodeIdx] = wSum[nodeIdx] * searchDir[nodeIdx];
   }
 
-  // Multiply-subtract off-diagonal elements
+  // Multiply-add off-diagonal elements
   for (const DistanceConstraint& c : m_distanceConstraints) {
-    const glm::vec3& a = m_nodePositions.getVertex(c.a);
-    const glm::vec3& b = m_nodePositions.getVertex(c.b);
-    // TODO: Should this dist be cached at the start of the solver iter?
-    glm::vec3 diff = b - a;
-    float dist = glm::length(diff);
-    glm::vec3 projDiff = c.restLength * diff / dist;
     A_searchDir[c.b] -= s_k * searchDir[c.a];
     A_searchDir[c.a] -= s_k * searchDir[c.b]; // TODO: reinspect signs here...
+  }
+
+  // TODO: Point-triangle constraints...
+  if (s_resolveCollisions) {
+    float thresholdDistance = m_collisions.getThresholdDistance();
+    for (const EdgeCollision& col :
+         m_collisions.getCollisions().getEdgeCollisions()) {
+      uint32_t ia = indices[3 * col.triangleAIdx + col.edgeAIdx];
+      uint32_t ib = indices[3 * col.triangleAIdx + (col.edgeAIdx + 1) % 3];
+      uint32_t ic = indices[3 * col.triangleBIdx + col.edgeBIdx];
+      uint32_t id = indices[3 * col.triangleBIdx + (col.edgeBIdx + 1) % 3];
+
+      // TODO: Is it bad to disable the collision here on a per-iteration level?
+      
+      const glm::vec3& a = m_nodePositions.getVertex(ia);
+      const glm::vec3& b = m_nodePositions.getVertex(ib);
+      const glm::vec3& c = m_nodePositions.getVertex(ic);
+      const glm::vec3& d = m_nodePositions.getVertex(id);
+
+      glm::vec3 sep = glm::mix(c, d, col.v) - glm::mix(a, b, col.u);
+
+      float sepDist = glm::dot(sep, col.normal);
+
+      // TODO: This gets treated as a bilateral constraint correctly
+      // if the contact is in the system matrix at all...
+      // this will make the collisions slightly "sticky"
+      // This formulation might also cause damping perpendicular to
+      // the collision normal
+      if (sepDist < thresholdDistance) 
+      {
+        glm::vec3 mixedDirAb = glm::mix(searchDir[ia], searchDir[ib], col.u);
+        glm::vec3 mixedDirCd = glm::mix(searchDir[ic], searchDir[id], col.v);
+
+        A_searchDir[ia] +=
+            s_collisionStrength * (col.u * searchDir[ib] - mixedDirCd);
+        A_searchDir[ib] +=
+            s_collisionStrength * ((1.0f - col.u) * searchDir[ia] - mixedDirCd);
+        A_searchDir[ic] +=
+            s_collisionStrength * (col.v * searchDir[id] - mixedDirAb);
+        A_searchDir[id] +=
+            s_collisionStrength * ((1.0f - col.v) * searchDir[ic] - mixedDirAb);
+      }
+    }
   }
 }
 
@@ -315,6 +398,9 @@ void ClothSim::_conjugateGradientSolve() {
       res -= stepSize * A_searchDir[nodeIdx];
       resNormSq += glm::dot(res, res);
     }
+
+    if (resNormSq < 0.000001f)
+      break;
 
     float dS = resNormSq / lastResNormSq;
     for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
@@ -587,7 +673,7 @@ void ClothSim::updateUI() {
       ImGui::Combo("##solvermode", &s_solverMode, solverModes, 2);
       if (s_solverMode == 1) {
         ImGui::Text("CG Iters:");
-        ImGui::SliderInt("##cgiters", &s_cgIters, 1, 20);
+        ImGui::SliderInt("##cgiters", &s_cgIters, 1, 200);
       }
     }
 
