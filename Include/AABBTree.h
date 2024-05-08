@@ -108,6 +108,7 @@ public:
       const StridedView<uint32_t>& tris,
       const StridedView<glm::vec3>& positions,
       const StridedView<glm::vec3>& prevPositions,
+      float padding,
       const FrameContext& frame);
   void updateUI();
 

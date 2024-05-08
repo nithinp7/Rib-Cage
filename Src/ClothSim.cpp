@@ -179,18 +179,18 @@ static int s_stepFrameCounter = 0;
 
 static bool s_bDebugColoring = false;
 
-static int s_solverMode = 1;
+static int s_solverMode = 0;
 static int s_cgIters = 10;
 
 static int s_solverSubsteps = 1;
-static float s_maxSpeed = 0.1f;
+static float s_maxSpeed = 0.05f;
 static float s_damping = 0.0f; // 0.02f;
-static float s_k = 1.0f;       // 0.125f;
+static float s_k = 0.125f;
 static float s_collisionStrength = 1.0f;
 static float s_gravity = 1.0f;
 
 static bool s_resolveCollisions = false; // true;
-static int s_collisionIterations = 3;
+static int s_collisionIterations = 1;
 
 static bool s_fixTop = true;
 static bool s_fixBottom = true;
@@ -254,6 +254,7 @@ float ClothSim::_computeConstraintResiduals(
 
   if (s_resolveCollisions) {
     float thresholdDistance = m_collisions.getThresholdDistance();
+
     for (const PointTriangleCollision& col :
          m_collisions.getCollisions().getTriangleCollisions()) {
       uint32_t ia = indices[3 * col.triangleIdx + 0];
@@ -277,8 +278,7 @@ float ClothSim::_computeConstraintResiduals(
         n = -n;
 
       float d = glm::dot(ap, n);
-      if (d < thresholdDistance)
-      {
+      if (d < thresholdDistance) {
         glm::vec3 err = s_collisionStrength * (thresholdDistance - d) * n;
 
         residual[ip] += err;
@@ -314,8 +314,7 @@ float ClothSim::_computeConstraintResiduals(
       // this will make the collisions slightly "sticky"
       // This formulation might also cause damping perpendicular to
       // the collision normal
-      if (sepDist < thresholdDistance)
-      {
+      if (sepDist < thresholdDistance) {
         glm::vec3 projDiff = thresholdDistance * col.normal / sepDist;
         // b - Ax
         glm::vec3 err =
@@ -362,6 +361,7 @@ void ClothSim::_computeASearchDir(
   // TODO: Point-triangle constraints...
   if (s_resolveCollisions) {
     float thresholdDistance = m_collisions.getThresholdDistance();
+
     for (const PointTriangleCollision& col :
          m_collisions.getCollisions().getTriangleCollisions()) {
       uint32_t ia = indices[3 * col.triangleIdx + 0];
@@ -385,8 +385,7 @@ void ClothSim::_computeASearchDir(
         n = -n;
 
       float d = glm::dot(ap, n);
-      if (d < thresholdDistance)
-      {
+      if (d < thresholdDistance) {
         A_searchDir[ip] -=
             s_collisionStrength *
             ((searchDir[ia] + searchDir[ib] + searchDir[ic]) / 3.0f);
@@ -425,8 +424,7 @@ void ClothSim::_computeASearchDir(
       // this will make the collisions slightly "sticky"
       // This formulation might also cause damping perpendicular to
       // the collision normal
-      if (sepDist < thresholdDistance)
-      {
+      if (sepDist < thresholdDistance) {
         glm::vec3 mixedDirAb = glm::mix(searchDir[ia], searchDir[ib], col.u);
         glm::vec3 mixedDirCd = glm::mix(searchDir[ic], searchDir[id], col.v);
 
@@ -541,7 +539,7 @@ void ClothSim::_projectedGaussSeidelSolve() {
     if (s_resolveCollisions) {
 
       float thresholdDistance = m_collisions.getThresholdDistance();
-
+         
       for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
         for (const PointTriangleCollision& col :
              m_collisions.getCollisions().getTriangleCollisions()) {
@@ -637,6 +635,20 @@ void ClothSim::update(const FrameContext& frame) {
       pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
     }
 
+    // Fix-up AABB
+    {
+      const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
+
+      m_aabb.update(
+          indices,
+          positions,
+          m_prevPositions,
+          m_collisions.getThresholdDistance(),
+          frame);
+      m_collisions
+          .update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
+    }
+
     if (s_solverMode == 0)
       _projectedGaussSeidelSolve();
     else if (s_solverMode == 1)
@@ -645,30 +657,21 @@ void ClothSim::update(const FrameContext& frame) {
 
   m_nodePositions.upload(frame.frameRingBufferIndex);
 
-  // Fix-up AABB
-  {
-    const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
+  for (uint32_t i = 0; i < MAX_NODES; ++i)
+    m_nodeFlags.setVertex(0, i);
 
-    m_aabb.update(indices, positions, m_prevPositions, frame);
-    m_collisions
-        .update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
+  if (s_bDebugColoring) {
+    for (const PointTriangleCollision& c :
+          m_collisions.getCollisions().getTriangleCollisions()) {
+      m_nodeFlags.setVertex(1, c.pointIdx);
 
-    for (uint32_t i = 0; i < MAX_NODES; ++i)
-      m_nodeFlags.setVertex(0, i);
-
-    if (s_bDebugColoring) {
-      for (const PointTriangleCollision& c :
-           m_collisions.getCollisions().getTriangleCollisions()) {
-        m_nodeFlags.setVertex(1, c.pointIdx);
-
-        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
-        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 1]);
-        m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 2]);
-      }
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 1]);
+      m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 2]);
     }
-
-    m_nodeFlags.upload(frame.frameRingBufferIndex);
   }
+
+  m_nodeFlags.upload(frame.frameRingBufferIndex);
 }
 
 void ClothSim::draw(

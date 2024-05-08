@@ -118,6 +118,10 @@ static bool pointTriangleCCD(
   bBackFace = bc.z < 0.0f;
 
   // clamp barycentric coords within triangle
+  float bcz = 1.0f - bc.x - bc.y;
+  if (bc.x < 0.0f || bc.x > 1.0f || bc.y < 0.0f || bc.y > 1.0f || bcz < 0.0f || bcz > 0.0f)
+    return false;
+  
   glm::vec2 clampedBc(
       glm::clamp(bc.x, 0.0f, 1.0f),
       glm::clamp(bc.y, 0.0f, 1.0f));
