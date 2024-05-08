@@ -181,6 +181,7 @@ static bool s_bDebugColoring = false;
 
 static int s_solverMode = 0;
 static int s_cgIters = 10;
+static int s_residualUpdateIters = 1;
 
 static int s_solverSubsteps = 1;
 static float s_maxSpeed = 0.05f;
@@ -477,10 +478,14 @@ void ClothSim::_conjugateGradientSolve() {
 
     // update residual
     float resNormSq = 0.0f;
-    for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
-      glm::vec3& res = residual[nodeIdx];
-      res -= stepSize * A_searchDir[nodeIdx];
-      resNormSq += glm::dot(res, res);
+    if (cgIter % s_residualUpdateIters == 0) {
+      resNormSq = _computeConstraintResiduals(residual, wSum);
+    } else {
+      for (uint32_t nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
+        glm::vec3& res = residual[nodeIdx];
+        res -= stepSize * A_searchDir[nodeIdx];
+        resNormSq += glm::dot(res, res);
+      }
     }
 
     if (resNormSq < 0.00001f)
@@ -539,7 +544,7 @@ void ClothSim::_projectedGaussSeidelSolve() {
     if (s_resolveCollisions) {
 
       float thresholdDistance = m_collisions.getThresholdDistance();
-         
+
       for (int colIter = 0; colIter < s_collisionIterations; ++colIter) {
         for (const PointTriangleCollision& col :
              m_collisions.getCollisions().getTriangleCollisions()) {
@@ -662,7 +667,7 @@ void ClothSim::update(const FrameContext& frame) {
 
   if (s_bDebugColoring) {
     for (const PointTriangleCollision& c :
-          m_collisions.getCollisions().getTriangleCollisions()) {
+         m_collisions.getCollisions().getTriangleCollisions()) {
       m_nodeFlags.setVertex(1, c.pointIdx);
 
       m_nodeFlags.setVertex(1, indices[3 * c.triangleIdx + 0]);
@@ -766,6 +771,8 @@ void ClothSim::updateUI() {
       if (s_solverMode == 1) {
         ImGui::Text("CG Iters:");
         ImGui::SliderInt("##cgiters", &s_cgIters, 1, 200);
+        ImGui::Text("Residual Update:");
+        ImGui::SliderInt("##residualupdate", &s_residualUpdateIters, 1, 20);
       }
     }
 
