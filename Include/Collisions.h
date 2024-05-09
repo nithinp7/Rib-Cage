@@ -27,6 +27,8 @@ struct PointPointCollision {
 };
 
 struct PointTriangleCollision {
+  float bcx;
+  float bcy;
   uint32_t pointIdx;
   uint32_t triangleIdx : 31;
   uint32_t bBackFace : 1;

@@ -112,6 +112,8 @@ static bool pointTriangleCCD(
     const glm::vec3& ap0,
     const glm::vec3& ap1,
     float thresholdDistanceSq,
+    float& bcx,
+    float& bcy,
     bool& bBackFace) {
   // barycentric coords
   glm::vec3 bc = rw2b_t0 * ap0;
@@ -119,18 +121,16 @@ static bool pointTriangleCCD(
 
   // clamp barycentric coords within triangle
   float bcz = 1.0f - bc.x - bc.y;
-  if (bc.x < 0.0f || bc.x > 1.0f || bc.y < 0.0f || bc.y > 1.0f || bcz < 0.0f || bcz > 0.0f)
+  if (bc.x < 0.0f || bc.x > 1.0f || bc.y < 0.0f || bc.y > 1.0f || bcz < 0.0f || bcz > 1.0f)
     return false;
   
-  glm::vec2 clampedBc(
-      glm::clamp(bc.x, 0.0f, 1.0f),
-      glm::clamp(bc.y, 0.0f, 1.0f));
-  float uv = bc.x + bc.y;
-  if (uv > 1.0f)
-    clampedBc /= uv;
-
+  glm::vec2 clampedBc(bc.x, bc.y);
+  
   glm::vec3 closestPoint_t0 = b2rw_t0 * clampedBc;
   glm::vec3 closestPoint_t1 = b2rw_t1 * clampedBc;
+
+  bcx = clampedBc.x;
+  bcy = clampedBc.y;
 
   glm::vec3 n; // TODO: Should we not use this n??
   return pointPointCCD(
@@ -461,6 +461,8 @@ void Collisions::update(
               continue;
 
             bool bBackFace;
+            float bcx;
+            float bcy;
             if (!pointTriangleCCD(
                     b2rw_t0,
                     rw2b_t0,
@@ -468,16 +470,21 @@ void Collisions::update(
                     prevPositions[ip] - prevPositions[ia],
                     positions[ip] - positions[ia],
                     thresholdDistSq,
+                    bcx,
+                    bcy,
                     bBackFace))
               continue;
 
             PointTriangleCollision& c = m_triangleCollisions.emplace_back();
+            c.bcx = bcx;
+            c.bcy = bcy;
             c.bBackFace = bBackFace;
             c.pointIdx = ip;
             c.triangleIdx = leafA->triIdx;
           }
         }
 
+        if (0)
         {
           // Triangle B against all the points in triangle A
           uint32_t ia = indices[3 * leafB->triIdx + 0];
@@ -506,6 +513,8 @@ void Collisions::update(
               continue;
 
             bool bBackFace;
+            float bcx;
+            float bcy;
             if (!pointTriangleCCD(
                     b2rw_t0,
                     rw2b_t0,
@@ -513,10 +522,14 @@ void Collisions::update(
                     prevPositions[ip] - prevPositions[ia],
                     positions[ip] - positions[ia],
                     thresholdDistSq,
+                    bcx,
+                    bcy,
                     bBackFace))
               continue;
 
             PointTriangleCollision& c = m_triangleCollisions.emplace_back();
+            c.bcx = bcx;
+            c.bcy = bcy;
             c.bBackFace = bBackFace;
             c.pointIdx = ip;
             c.triangleIdx = leafB->triIdx;

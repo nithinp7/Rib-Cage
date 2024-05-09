@@ -179,12 +179,12 @@ static int s_stepFrameCounter = 0;
 
 static bool s_bDebugColoring = false;
 
-static int s_solverMode = 0;
+static int s_solverMode = 1;
 static int s_cgIters = 10;
 static int s_residualUpdateIters = 1;
 
 static int s_solverSubsteps = 1;
-static float s_maxSpeed = 0.05f;
+static float s_maxSpeed = 0.01f;
 static float s_damping = 0.0f; // 0.02f;
 static float s_k = 0.125f;
 static float s_collisionStrength = 1.0f;
@@ -254,7 +254,7 @@ float ClothSim::_computeConstraintResiduals(
   }
 
   if (s_resolveCollisions) {
-    float thresholdDistance = m_collisions.getThresholdDistance();
+    float thresholdDistance = 0.5f * m_collisions.getThresholdDistance();
 
     for (const PointTriangleCollision& col :
          m_collisions.getCollisions().getTriangleCollisions()) {
@@ -282,15 +282,17 @@ float ClothSim::_computeConstraintResiduals(
       if (d < thresholdDistance) {
         glm::vec3 err = s_collisionStrength * (thresholdDistance - d) * n;
 
+        float bcz = 1.0f - col.bcx - col.bcy;
+
         residual[ip] += err;
-        residual[ia] -= err;
-        residual[ib] -= err;
-        residual[ic] -= err;
+        residual[ia] -= bcz * err;
+        residual[ib] -= col.bcx * err;
+        residual[ic] -= col.bcy * err;
 
         wSum[ip] += s_collisionStrength;
-        wSum[ia] += s_collisionStrength / 3.0f;
-        wSum[ib] += s_collisionStrength / 3.0f;
-        wSum[ic] += s_collisionStrength / 3.0f;
+        wSum[ia] += bcz * s_collisionStrength;
+        wSum[ib] += col.bcx * s_collisionStrength;
+        wSum[ic] += col.bcy * s_collisionStrength;
       }
     }
 
@@ -316,7 +318,6 @@ float ClothSim::_computeConstraintResiduals(
       // This formulation might also cause damping perpendicular to
       // the collision normal
       if (sepDist < thresholdDistance) {
-        glm::vec3 projDiff = thresholdDistance * col.normal / sepDist;
         // b - Ax
         glm::vec3 err =
             s_collisionStrength * (thresholdDistance - sepDist) * col.normal;
@@ -356,12 +357,12 @@ void ClothSim::_computeASearchDir(
   // Multiply-add off-diagonal elements
   for (const DistanceConstraint& c : m_distanceConstraints) {
     A_searchDir[c.b] -= s_k * searchDir[c.a];
-    A_searchDir[c.a] -= s_k * searchDir[c.b]; // TODO: reinspect signs here...
+    A_searchDir[c.a] -= s_k * searchDir[c.b];
   }
 
   // TODO: Point-triangle constraints...
   if (s_resolveCollisions) {
-    float thresholdDistance = m_collisions.getThresholdDistance();
+    float thresholdDistance = 0.5f * m_collisions.getThresholdDistance();
 
     for (const PointTriangleCollision& col :
          m_collisions.getCollisions().getTriangleCollisions()) {
@@ -387,18 +388,20 @@ void ClothSim::_computeASearchDir(
 
       float d = glm::dot(ap, n);
       if (d < thresholdDistance) {
-        A_searchDir[ip] -=
-            s_collisionStrength *
-            ((searchDir[ia] + searchDir[ib] + searchDir[ic]) / 3.0f);
+        float bcz = 1.0f - col.bcx - col.bcy;
+
+        A_searchDir[ip] -= s_collisionStrength *
+                           (bcz * searchDir[ia] + col.bcx * searchDir[ib] +
+                            col.bcy * searchDir[ic]);
         A_searchDir[ia] +=
             s_collisionStrength *
-            ((searchDir[ib] + searchDir[ic]) / 3.0f - searchDir[ip]);
+            (col.bcx * searchDir[ib] + col.bcy * searchDir[ic] - searchDir[ip]);
         A_searchDir[ib] +=
             s_collisionStrength *
-            ((searchDir[ic] + searchDir[ia]) / 3.0f - searchDir[ip]);
+            (col.bcy * searchDir[ic] + bcz * searchDir[ia] - searchDir[ip]);
         A_searchDir[ic] +=
             s_collisionStrength *
-            ((searchDir[ia] + searchDir[ib]) / 3.0f - searchDir[ip]);
+            (bcz * searchDir[ia] + col.bcx * searchDir[ib] - searchDir[ip]);
       }
     }
 
@@ -765,7 +768,7 @@ void ClothSim::updateUI() {
     if (ImGui::CollapsingHeader("Solver", ImGuiTreeNodeFlags_DefaultOpen)) {
       const char* solverModes[] = {
           "Projected Gauss-Seidel",
-          "Conjugated Gradient Descent"};
+          "Conjugate Gradient Descent"};
       ImGui::Text("Solver Mode:");
       ImGui::Combo("##solvermode", &s_solverMode, solverModes, 2);
       if (s_solverMode == 1) {
