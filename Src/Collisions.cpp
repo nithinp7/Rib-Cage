@@ -121,11 +121,12 @@ static bool pointTriangleCCD(
 
   // clamp barycentric coords within triangle
   float bcz = 1.0f - bc.x - bc.y;
-  if (bc.x < 0.0f || bc.x > 1.0f || bc.y < 0.0f || bc.y > 1.0f || bcz < 0.0f || bcz > 1.0f)
+  if (bc.x < 0.0f || bc.x > 1.0f || bc.y < 0.0f || bc.y > 1.0f || bcz < 0.0f ||
+      bcz > 1.0f)
     return false;
-  
+
   glm::vec2 clampedBc(bc.x, bc.y);
-  
+
   glm::vec3 closestPoint_t0 = b2rw_t0 * clampedBc;
   glm::vec3 closestPoint_t1 = b2rw_t1 * clampedBc;
 
@@ -190,11 +191,11 @@ static bool edgeEdgeCCD(
 
   glm::mat3x2 At = glm::transpose(A);
   glm::mat2 AtA = At * A; // TODO: Handle degenerate ranks
-  
+
   // pseudo-inverse
   glm::vec2 x = -glm::inverse(AtA) * At * B;
-  u = glm::clamp(x.x, 0.0f, 1.0f);  
-  v = glm::clamp(x.y, 0.0f, 1.0f);  
+  u = glm::clamp(x.x, 0.0f, 1.0f);
+  v = glm::clamp(x.y, 0.0f, 1.0f);
 
   glm::vec3 closestPoint_ab_t0 = glm::mix(a0, b0, u);
   glm::vec3 closestPoint_ab_t1 = glm::mix(a1, b1, u);
@@ -392,7 +393,8 @@ void Collisions::update(
     // From Mathias Muller
     return (x * 92837111) ^ (y * 689287499) ^ ((x + y) * 283923481);
   };
-  auto edgeHashInsert = [&](uint32_t a, uint32_t b, uint32_t c, uint32_t d) -> bool {
+  auto edgeHashInsert =
+      [&](uint32_t a, uint32_t b, uint32_t c, uint32_t d) -> bool {
     // impose ordering
     if (b > a)
       std::swap(a, b);
@@ -406,7 +408,7 @@ void Collisions::update(
       std::swap(x, y);
 
     uint32_t slotIdx = hashEdge(x, y) % edgeHashMapCount;
-    
+
     uint32_t loopCount = 0;
     while (!edgeHashMap[slotIdx].isEmpty()) {
       if (edgeHashMap[slotIdx].x == x && edgeHashMap[slotIdx].y == y) {
@@ -416,7 +418,7 @@ void Collisions::update(
       // saturated hashmap, give-up de-duplication without inserting
       if (loopCount++ > edgeHashMapCount)
         return true;
-      
+
       slotIdx = (slotIdx + 1) % edgeHashMapCount;
     }
 
@@ -484,8 +486,7 @@ void Collisions::update(
           }
         }
 
-        if (0)
-        {
+        if (0) {
           // Triangle B against all the points in triangle A
           uint32_t ia = indices[3 * leafB->triIdx + 0];
           uint32_t ib = indices[3 * leafB->triIdx + 1];
@@ -567,7 +568,7 @@ void Collisions::update(
                     v,
                     n))
               continue;
-            
+
             if (s_dedupEdgeCollisions && !edgeHashInsert(ia, ib, ic, id))
               continue;
 
@@ -672,12 +673,12 @@ void CollisionsManager::update(
           const glm::vec3& a = positions[indices[3 * col.triangleIdx + 0]];
           const glm::vec3& b = positions[indices[3 * col.triangleIdx + 1]];
           const glm::vec3& c = positions[indices[3 * col.triangleIdx + 2]];
-          
+
           glm::vec3 ap = p - a;
           glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
-          glm::vec3 projP = p - glm::dot(ap, n) * n;
+          glm::vec3 projP =
+              (1.0f - col.bcx - col.bcy) * a + col.bcx * b + col.bcy * c;
 
-          // m_scene.addVertex(p); // TODO!!!
           uint32_t orange = 0xffaa00ff;
           m_dbgViz.addLine(p, projP, orange);
 
@@ -687,7 +688,7 @@ void CollisionsManager::update(
           m_dbgViz.addLine(c, a, purple);
         }
       }
-      
+
       if (s_visualizationMode == 0 || s_visualizationMode == 2) {
         for (const EdgeCollision& col : m_collisions.getEdgeCollisions()) {
           const glm::vec3& a =

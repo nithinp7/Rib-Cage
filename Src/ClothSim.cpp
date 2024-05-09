@@ -9,7 +9,7 @@ using namespace AltheaEngine;
 #define MAX_NODES 10000 // 100x100
 #define MAX_DISTANCE_CONSTRAINTS 100000
 
-#define SHEET_WIDTH 10
+#define SHEET_WIDTH 20
 
 namespace RibCage {
 struct PushConstants {
@@ -625,24 +625,9 @@ void ClothSim::update(const FrameContext& frame) {
       --s_stepFrameCounter;
 
     // TODO: Sim solver step
-    float dt = 1.0f / 30.0f;
+    float dt = 1.0f / 30.0f / s_solverSubsteps;
 
-    // TODO: time substeps
-    // Apply gravity
-    glm::vec3 gravity(0.0f, -s_gravity, 0.0f);
-    for (uint32_t nodeIdx = 0; nodeIdx < m_nodePositions.getVertexCount();
-         ++nodeIdx) {
-      glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
-      glm::vec3 velDt = pos - m_prevPositions[nodeIdx];
-      float speed = glm::length(velDt);
-      if (speed > s_maxSpeed)
-        velDt *= s_maxSpeed / speed;
-
-      m_prevPositions[nodeIdx] = pos;
-
-      pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
-    }
-
+    // TODO: Do collisions once per frame, not per substep...
     // Fix-up AABB
     {
       const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
@@ -656,11 +641,49 @@ void ClothSim::update(const FrameContext& frame) {
       m_collisions
           .update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
     }
+    for (int step = 0; step < s_solverSubsteps; ++step) {
 
-    if (s_solverMode == 0)
-      _projectedGaussSeidelSolve();
-    else if (s_solverMode == 1)
-      _conjugateGradientSolve();
+      // TODO: time substeps
+      // Apply gravity
+      glm::vec3 gravity(0.0f, -s_gravity, 0.0f);
+      for (uint32_t nodeIdx = 0; nodeIdx < m_nodePositions.getVertexCount();
+           ++nodeIdx) {
+        glm::vec3& pos = m_nodePositions.getVertex(nodeIdx);
+        glm::vec3 velDt = pos - m_prevPositions[nodeIdx];
+        float speed = glm::length(velDt);
+        if (speed > s_maxSpeed)
+          velDt *= s_maxSpeed / speed;
+
+        m_prevPositions[nodeIdx] = pos;
+
+        pos += 0.5f * gravity * dt * dt + velDt * (1.0f - s_damping);
+      }
+
+      // // TODO: Do collisions once per frame, not per substep...
+      // // Fix-up AABB
+      // {
+      //   const std::vector<glm::vec3>& positions =
+      //   m_nodePositions.getVertices();
+
+      //   m_aabb.update(
+      //       indices,
+      //       positions,
+      //       m_prevPositions,
+      //       m_collisions.getThresholdDistance(),
+      //       frame);
+      //   m_collisions.update(
+      //       frame,
+      //       indices,
+      //       positions,
+      //       m_prevPositions,
+      //       m_aabb.getTree());
+      // }
+
+      if (s_solverMode == 0)
+        _projectedGaussSeidelSolve();
+      else if (s_solverMode == 1)
+        _conjugateGradientSolve();
+    }
   }
 
   m_nodePositions.upload(frame.frameRingBufferIndex);

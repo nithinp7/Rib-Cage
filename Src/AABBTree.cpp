@@ -247,7 +247,7 @@ AABBManager::AABBManager(
 
 static bool s_showAABBLeaves = false;
 static bool s_showAABBInnerNodes = false;
-static float s_padding = 0.0f;
+static float s_padding = 0.01f;
 
 void AABBManager::update(
     const StridedView<uint32_t>& tris,
@@ -255,17 +255,15 @@ void AABBManager::update(
     const StridedView<glm::vec3>& prevPositions,
     float padding,
     const FrameContext& frame) {
-  // TODO: Add padding, add swept prims, etc
-  s_padding = padding;
-  m_tree.refitTriangles(tris, positions, prevPositions, padding);
+  m_tree.refitTriangles(tris, positions, prevPositions, padding + s_padding);
   m_tree.upload(frame.frameRingBufferIndex);
 }
 
 void AABBManager::updateUI() {
   if (ImGui::CollapsingHeader("BVH")) {
     ImGui::Indent();
-    // ImGui::Text("Padding:");
-    // ImGui::SliderFloat("##padding", &s_padding, 0.0f, 2.5f);
+    ImGui::Text("Padding:");
+    ImGui::SliderFloat("##padding", &s_padding, 0.0f, 0.1f);
     ImGui::Text("Show AABB Leaves:");
     ImGui::Checkbox("##showleaves", &s_showAABBLeaves);
     ImGui::Text("Show AABB Inner Nodes:");
