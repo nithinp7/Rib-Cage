@@ -129,6 +129,7 @@ void RibCage::destroyRenderState(Application& app) {
   m_skeletonEditor = {};
   m_debugScene = {};
   m_clothSim = {};
+  m_objTestScene = {};
 }
 
 static int s_cameraMode = 1;
@@ -279,7 +280,7 @@ void RibCage::_createGlobalResources(
 
   // Create GLTF resource heaps
   {
-    _createModels(app, commandBuffer);
+    // _createModels(app, commandBuffer);
 
     for (Model& model : m_models) {
       model.registerToHeap(m_globalHeap);
@@ -335,6 +336,12 @@ void RibCage::_createGlobalResources(
       m_globalResources.getGBuffer());
 
   m_clothSim = ClothSim(
+      app,
+      commandBuffer,
+      m_globalResources.getGBuffer(),
+      m_globalHeap);
+      
+  m_objTestScene = ObjTestScene(
       app,
       commandBuffer,
       m_globalResources.getGBuffer(),

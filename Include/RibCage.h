@@ -3,6 +3,7 @@
 #include "Skeleton.h"
 #include "DebugTools.h"
 #include "ClothSim.h"
+#include "SimpleObjLoader.h"
 
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
@@ -87,6 +88,7 @@ private:
 
   SkeletonEditor m_skeletonEditor;
   SelectableScene m_debugScene;
+  ObjTestScene m_objTestScene;
 
   ClothSim m_clothSim;
 
