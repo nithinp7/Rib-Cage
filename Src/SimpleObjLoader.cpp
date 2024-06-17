@@ -43,19 +43,19 @@ bool loadObj(
                             uint32_t vt2,
                             uint32_t vn2) {
     ObjVert& vert0 = vertices.emplace_back();
-    vert0.position = positions[v0];
-    vert0.uv = uvs[vt0];
-    vert0.normal = normals[vn0];
+    vert0.position = positions[v0-1];
+    vert0.uv = uvs[vt0-1];
+    vert0.normal = normals[vn0-1];
 
     ObjVert& vert1 = vertices.emplace_back();
-    vert1.position = positions[v1];
-    vert1.uv = uvs[vt1];
-    vert1.normal = normals[vn1];
+    vert1.position = positions[v1-1];
+    vert1.uv = uvs[vt1-1];
+    vert1.normal = normals[vn1-1];
 
     ObjVert& vert2 = vertices.emplace_back();
-    vert2.position = positions[v2];
-    vert2.uv = uvs[vt2];
-    vert2.normal = normals[vn2];
+    vert2.position = positions[v2-1];
+    vert2.uv = uvs[vt2-1];
+    vert2.normal = normals[vn2-1];
   };
 
   char lineBuf[1024];
@@ -148,6 +148,13 @@ bool loadObj(
     }
   }
 
+  if (vertices.size() > 0) {
+    mesh->m_vertices = VertexBuffer<ObjVert>(
+        app,
+        commandBuffer,
+        std::vector<ObjVert>(vertices.begin_ptr(), vertices.end_ptr()));
+  }
+
   file.close();
 
   return true;
@@ -157,6 +164,13 @@ bool loadObj(
 
 using namespace SimpleObjLoader;
 
+namespace {
+struct PushConstants {
+  uint32_t globalResources;
+  uint32_t globalUniforms;
+};
+} // namespace
+
 ObjTestScene::ObjTestScene(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
@@ -164,9 +178,46 @@ ObjTestScene::ObjTestScene(
     GlobalHeap& heap) {
   std::string path = GProjectDirectory + "/Data/ImportedModels/testExport.obj";
   loadObj(app, commandBuffer, path.c_str(), m_objects.emplace_back());
+
+    // Render pass
+
+    std::vector<SubpassBuilder> subpasses;
+    {
+      SubpassBuilder& builder = subpasses.emplace_back();
+
+      GBufferResources::setupAttachments(builder);
+
+      builder.pipelineBuilder
+          // TODO: turn back-face culling back on...
+          .setCullMode(VK_CULL_MODE_NONE)
+          .addVertexInputBinding<ObjVert>()
+          .addVertexAttribute(VertexAttributeType::VEC3, offsetof(ObjVert, position))
+          .addVertexAttribute(VertexAttributeType::VEC3, offsetof(ObjVert, normal))
+          .addVertexAttribute(VertexAttributeType::VEC2, offsetof(ObjVert, uv))
+          .addVertexShader(GProjectDirectory + "/Shaders/Obj/Obj.vert")
+          .addFragmentShader(GProjectDirectory + "/Shaders/Obj/Obj.frag")
+
+          .layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+          .addPushConstants<PushConstants>();
+    }
+
+    std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
+    m_renderPass = RenderPass(
+        app,
+        app.getSwapChainExtent(),
+        std::move(attachments),
+        std::move(subpasses));
+
+    m_frameBuffer = FrameBuffer(
+        app,
+        m_renderPass,
+        app.getSwapChainExtent(),
+        gBuffer.getAttachmentViewsA());
 }
 
-void ObjTestScene::tryRecompileShaders(Application& app) {}
+void ObjTestScene::tryRecompileShaders(Application& app) {
+  m_renderPass.tryRecompile(app);
+}
 
 void ObjTestScene::update(const FrameContext& frame) {}
 
@@ -176,7 +227,28 @@ void ObjTestScene::draw(
     const FrameContext& frame,
     VkDescriptorSet heapSet,
     BufferHandle globalResourcesHandle,
-    UniformHandle globalUniformsHandle) {}
+    UniformHandle globalUniformsHandle) {
+
+  PushConstants push{};
+  push.globalResources = globalResourcesHandle.index;
+  push.globalUniforms = globalUniformsHandle.index;
+
+  // Draw
+  {
+    ActiveRenderPass pass =
+        m_renderPass.begin(app, commandBuffer, frame, m_frameBuffer);
+
+    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
+    pass.getDrawContext().bindDescriptorSets();
+    pass.getDrawContext().updatePushConstants(push, 0);
+
+    for (const LoadedObj& obj : m_objects) {
+      for (const ObjMesh& mesh : obj.m_meshes) {
+        pass.getDrawContext().draw(mesh.m_vertices);
+      }
+    }
+  }
+}
 
 void ObjTestScene::updateUI() {}
 } // namespace RibCage

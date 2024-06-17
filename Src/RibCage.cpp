@@ -280,7 +280,7 @@ void RibCage::_createGlobalResources(
 
   // Create GLTF resource heaps
   {
-    // _createModels(app, commandBuffer);
+    _createModels(app, commandBuffer);
 
     for (Model& model : m_models) {
       model.registerToHeap(m_globalHeap);
@@ -525,6 +525,13 @@ void RibCage::draw(
       heapDescriptorSet,
       m_globalUniforms.getCurrentBindlessHandle(frame));
   m_clothSim.draw(
+      app,
+      commandBuffer,
+      frame,
+      heapDescriptorSet,
+      m_globalResources.getHandle(),
+      m_globalUniforms.getCurrentBindlessHandle(frame));
+  m_objTestScene.draw(
       app,
       commandBuffer,
       frame,

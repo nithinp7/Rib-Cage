@@ -7,6 +7,7 @@
 #include <Althea/DeferredRendering.h>
 #include <Althea/FrameContext.h>
 #include <Althea/RenderPass.h>
+#include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <glm/glm.hpp>
 
@@ -68,7 +69,8 @@ public:
   void updateUI();
 
 private:
-  RenderPass m_gbufferPass;
+  RenderPass m_renderPass;
+  FrameBuffer m_frameBuffer;
   std::vector<SimpleObjLoader::LoadedObj> m_objects;
 };
 } // namespace RibCage
