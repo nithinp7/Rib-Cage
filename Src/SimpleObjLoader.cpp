@@ -171,7 +171,7 @@ struct PushConstants {
 };
 } // namespace
 
-ObjTestScene::ObjTestScene(
+void ObjTestScene::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
     const GBufferResources& gBuffer,

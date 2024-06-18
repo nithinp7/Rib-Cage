@@ -29,18 +29,6 @@ using namespace AltheaEngine;
 
 namespace RibCage {
 namespace {
-struct ForwardPassPushConstants {
-  glm::mat4 model;
-  uint32_t primitiveIdx;
-
-  uint32_t globalResources;
-  uint32_t globalUniforms;
-};
-
-struct FloorPushConstants {
-  uint32_t globalUniforms;
-};
-
 struct DeferredPassPushConstants {
   uint32_t globalResources;
   uint32_t globalUniforms;
@@ -72,11 +60,12 @@ void RibCage::initGame(Application& app) {
   input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
       [&app, that = this]() {
-        that->m_forwardPass.tryRecompile(app);
         that->m_deferredPass.tryRecompile(app);
         that->m_debugScene.tryRecompileShaders(app);
         that->m_skeletonEditor.tryRecompileShaders(app);
-        that->m_clothSim.tryRecompileShaders(app);
+
+        for (auto& sceneElem : that->m_sceneElements)
+          sceneElem->tryRecompileShaders(app);
       });
 
   input.addMousePositionCallback(
@@ -102,7 +91,6 @@ void RibCage::createRenderState(Application& app) {
   SingleTimeCommandBuffer commandBuffer(app);
 
   _createGlobalResources(app, commandBuffer);
-  _createForwardPass(app);
   _createDeferredPass(app);
 }
 
@@ -110,12 +98,6 @@ void RibCage::destroyRenderState(Application& app) {
   Primitive::resetPrimitiveIndexCount();
 
   Gui::destroyRenderState(app);
-
-  m_models.clear();
-
-  m_forwardPass = {};
-  m_forwardFrameBuffer = {};
-  m_primitiveConstantsBuffer = {};
 
   m_deferredPass = {};
   m_swapChainFrameBuffers = {};
@@ -128,8 +110,8 @@ void RibCage::destroyRenderState(Application& app) {
 
   m_skeletonEditor = {};
   m_debugScene = {};
-  m_clothSim = {};
-  m_objTestScene = {};
+
+  m_sceneElements.clear();
 }
 
 static int s_cameraMode = 1;
@@ -137,7 +119,7 @@ static int s_cameraMode = 1;
 void RibCage::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
-    
+
     if (!app.getInputManager().getMouseCursorHidden()) {
       const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(
@@ -147,7 +129,8 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
 
       if (ImGui::Begin("Rib Cage")) {
         // m_skeletonEditor.updateUI();
-        m_clothSim.updateUI();
+        for (auto& sceneElem : m_sceneElements)
+          sceneElem->updateUI();
 
         if (ImGui::CollapsingHeader("Camera")) {
           static const char* cameraModes[] = {"Orbit", "Free"};
@@ -232,44 +215,9 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
   m_skeletonEditor
       .update(m_debugScene, camPos, cursorDir, prevInputMask, m_inputMask);
   m_debugScene.update(frame);
-  m_clothSim.update(frame);
-}
 
-void RibCage::_createModels(
-    Application& app,
-    SingleTimeCommandBuffer& commandBuffer) {
-
-  m_models.emplace_back(
-      app,
-      commandBuffer,
-      GEngineDirectory + "/Content/Models/DamagedHelmet.glb");
-  m_models.back().setModelTransform(glm::scale(
-      glm::translate(glm::mat4(1.0f), glm::vec3(36.0f, 0.0f, 0.0f)),
-      glm::vec3(4.0f)));
-
-  m_models.emplace_back(
-      app,
-      commandBuffer,
-      GEngineDirectory + "/Content/Models/FlightHelmet/FlightHelmet.gltf");
-  m_models.back().setModelTransform(glm::scale(
-      glm::translate(glm::mat4(1.0f), glm::vec3(50.0f, -1.0f, 0.0f)),
-      glm::vec3(8.0f)));
-
-  // m_models.emplace_back(
-  //     app,
-  //     commandBuffer,
-  //     GEngineDirectory + "/Content/Models/MetalRoughSpheres.glb");
-  // m_models.back().setModelTransform(glm::scale(
-  //     glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f)),
-  //     glm::vec3(4.0f)));
-
-  // m_models.emplace_back(
-  //     app,
-  //     commandBuffer,
-  //     GEngineDirectory + "/Content/Models/Sponza/glTF/Sponza.gltf");
-  // m_models.back().setModelTransform(glm::translate(
-  //     glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
-  //     glm::vec3(10.0f, -1.0f, 0.0f)));
+  for (auto& sceneElem : m_sceneElements)
+    sceneElem->update(frame);
 }
 
 void RibCage::_createGlobalResources(
@@ -278,43 +226,12 @@ void RibCage::_createGlobalResources(
   m_globalHeap = GlobalHeap(app);
   m_globalUniforms = GlobalUniformsResource(app, m_globalHeap);
 
-  // Create GLTF resource heaps
-  {
-    _createModels(app, commandBuffer);
-
-    for (Model& model : m_models) {
-      model.registerToHeap(m_globalHeap);
-    }
-
-    uint32_t primCount = 0;
-    for (const Model& model : m_models)
-      primCount += static_cast<uint32_t>(model.getPrimitivesCount());
-
-    m_primitiveConstantsBuffer =
-        StructuredBuffer<PrimitiveConstants>(app, primCount);
-
-    for (const Model& model : m_models) {
-      for (const Primitive& primitive : model.getPrimitives()) {
-        m_primitiveConstantsBuffer.setElement(
-            primitive.getConstants(),
-            primitive.getPrimitiveIndex());
-      }
-    }
-
-    // The primitive constant buffers contain all the bindless
-    // indices for the primitive texture resources
-    m_primitiveConstantsBuffer.upload(app, commandBuffer);
-    m_primitiveConstantsBuffer.registerToHeap(m_globalHeap);
-
-    // m_textureHeap = TextureHeap(m_models);
-  }
-
   m_globalResources = GlobalResources(
       app,
       commandBuffer,
       m_globalHeap,
       {},
-      m_primitiveConstantsBuffer.getHandle());
+      {});
 
   // Set up SSR resources
   m_SSR = ScreenSpaceReflection(
@@ -335,77 +252,15 @@ void RibCage::_createGlobalResources(
       m_globalHeap,
       m_globalResources.getGBuffer());
 
-  m_clothSim = ClothSim(
-      app,
-      commandBuffer,
-      m_globalResources.getGBuffer(),
-      m_globalHeap);
-      
-  m_objTestScene = ObjTestScene(
-      app,
-      commandBuffer,
-      m_globalResources.getGBuffer(),
-      m_globalHeap);
-}
+  m_sceneElements.emplace_back(new ClothSim);
+  m_sceneElements.emplace_back(new ObjTestScene);
 
-void RibCage::_createForwardPass(Application& app) {
-  std::vector<SubpassBuilder> subpassBuilders;
-
-  //  FORWARD GLTF PASS
-  {
-    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
-
-    GBufferResources::setupAttachments(subpassBuilder);
-
-    Primitive::buildPipeline(subpassBuilder.pipelineBuilder);
-
-    subpassBuilder
-        .pipelineBuilder
-        // Vertex shader
-        .addVertexShader(GEngineDirectory + "/Shaders/GltfForwardBindless.vert")
-        // Fragment shader
-        .addFragmentShader(
-            GEngineDirectory + "/Shaders/GltfForwardBindless.frag")
-
-        // Pipeline resource layouts
-        .layoutBuilder
-        // Global resources (view, projection, environment map)
-        .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
-        .addPushConstants<ForwardPassPushConstants>(VK_SHADER_STAGE_ALL);
-  }
-
-  // Floor
-  {
-    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
-
-    GBufferResources::setupAttachments(subpassBuilder);
-
-    subpassBuilder
-        .pipelineBuilder
-        // Vertex shader
-        .addVertexShader(GProjectDirectory + "/Shaders/Floor.vert")
-        // Fragment shader
-        .addFragmentShader(
-            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
-
-        // Pipeline resource layouts
-        .layoutBuilder
-        // Global resources (view, projection, environment map)
-        .addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
-        .addPushConstants<FloorPushConstants>(VK_SHADER_STAGE_ALL);
-  }
-
-  const GBufferResources& gBuffer = m_globalResources.getGBuffer();
-  std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
-  const VkExtent2D& extent = app.getSwapChainExtent();
-  m_forwardPass = RenderPass(
-      app,
-      extent,
-      std::move(attachments),
-      std::move(subpassBuilders));
-
-  m_forwardFrameBuffer =
-      FrameBuffer(app, m_forwardPass, extent, gBuffer.getAttachmentViewsA());
+  for (auto& sceneElem : m_sceneElements)
+    sceneElem->init(
+        app,
+        commandBuffer,
+        m_globalResources.getGBuffer(),
+        m_globalHeap);
 }
 
 void RibCage::_createDeferredPass(Application& app) {
@@ -428,18 +283,14 @@ void RibCage::_createDeferredPass(Application& app) {
     SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
     subpassBuilder.colorAttachments.push_back(0);
 
-    ShaderDefines defs;
-    defs.emplace("BINDLESS_SET", "0");
-
     subpassBuilder.pipelineBuilder.setCullMode(VK_CULL_MODE_FRONT_BIT)
         .setDepthTesting(false)
 
         // Vertex shader
-        .addVertexShader(GProjectDirectory + "/Shaders/DeferredPass.vert", defs)
+        .addVertexShader(GProjectDirectory + "/Shaders/DeferredPass.vert")
         // Fragment shader
         .addFragmentShader(
-            GProjectDirectory + "/Shaders/DeferredPass.frag",
-            defs)
+            GProjectDirectory + "/Shaders/DeferredPass.frag")
 
         // Pipeline resource layouts
         .layoutBuilder.addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
@@ -474,44 +325,6 @@ void RibCage::draw(
 
   VkDescriptorSet heapDescriptorSet = m_globalHeap.getDescriptorSet();
 
-  // Forward pass
-  {
-    ForwardPassPushConstants push{};
-    push.globalResources = m_globalResources.getConstants().getHandle().index;
-    push.globalUniforms =
-        m_globalUniforms.getCurrentBindlessHandle(frame).index;
-
-    ActiveRenderPass pass =
-        m_forwardPass.begin(app, commandBuffer, frame, m_forwardFrameBuffer);
-    // Bind global descriptor sets
-    pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
-    pass.getDrawContext().bindDescriptorSets();
-
-    // Draw models
-    for (const Model& model : m_models) {
-      for (const Primitive& primitive : model.getPrimitives()) {
-        push.model = primitive.computeWorldTransform();
-        push.primitiveIdx =
-            static_cast<uint32_t>(primitive.getPrimitiveIndex());
-
-        pass.getDrawContext().setFrontFaceDynamic(primitive.getFrontFace());
-        pass.getDrawContext().updatePushConstants(push, 0);
-        pass.getDrawContext().drawIndexed(
-            primitive.getVertexBuffer(),
-            primitive.getIndexBuffer());
-      }
-    }
-
-    pass.nextSubpass();
-    pass.setGlobalDescriptorSets(gsl::span(&heapDescriptorSet, 1));
-    pass.getDrawContext().bindDescriptorSets();
-    pass.getDrawContext().updatePushConstants(
-        FloorPushConstants{
-            m_globalUniforms.getCurrentBindlessHandle(frame).index},
-        0);
-    pass.getDrawContext().draw(6);
-  }
-
   m_debugScene.draw(
       app,
       commandBuffer,
@@ -524,20 +337,15 @@ void RibCage::draw(
       frame,
       heapDescriptorSet,
       m_globalUniforms.getCurrentBindlessHandle(frame));
-  m_clothSim.draw(
-      app,
-      commandBuffer,
-      frame,
-      heapDescriptorSet,
-      m_globalResources.getHandle(),
-      m_globalUniforms.getCurrentBindlessHandle(frame));
-  m_objTestScene.draw(
-      app,
-      commandBuffer,
-      frame,
-      heapDescriptorSet,
-      m_globalResources.getHandle(),
-      m_globalUniforms.getCurrentBindlessHandle(frame));
+
+  for (auto& sceneElem : m_sceneElements)
+    sceneElem->draw(
+        app,
+        commandBuffer,
+        frame,
+        heapDescriptorSet,
+        m_globalResources.getHandle(),
+        m_globalUniforms.getCurrentBindlessHandle(frame));
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
 

@@ -31,7 +31,7 @@ void ClothSim::_resetPositions() {
   }
 }
 
-ClothSim::ClothSim(
+void ClothSim::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
     const GBufferResources& gBuffer,

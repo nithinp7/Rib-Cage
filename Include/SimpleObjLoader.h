@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SceneElement.h"
+
 #include <Althea/ImageResource.h>
 #include <Althea/IndexBuffer.h>
 #include <Althea/SingleTimeCommandBuffer.h>
@@ -45,18 +47,20 @@ bool loadObj(
     
 } // namespace SimpleObjLoader
 
-class ObjTestScene {
+class ObjTestScene : public ISceneElement {
 public:
   ObjTestScene() = default;
-  ObjTestScene(
+  virtual ~ObjTestScene() = default;
+  
+  void init(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer,
       const GBufferResources& gBuffer,
-      GlobalHeap& heap);
+      GlobalHeap& heap) override;
 
-  void tryRecompileShaders(Application& app);
+  void tryRecompileShaders(Application& app) override;
 
-  void update(const FrameContext& frame);
+  void update(const FrameContext& frame) override;
 
   void draw(
       const Application& app,
@@ -64,9 +68,9 @@ public:
       const FrameContext& frame,
       VkDescriptorSet heapSet,
       BufferHandle globalResourcesHandle,
-      UniformHandle globalUniformsHandle);
+      UniformHandle globalUniformsHandle) override;
 
-  void updateUI();
+  void updateUI() override;
 
 private:
   RenderPass m_renderPass;

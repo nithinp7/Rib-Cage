@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SceneElement.h"
 #include "Skeleton.h"
 #include "DebugTools.h"
 #include "ClothSim.h"
@@ -32,6 +33,7 @@
 #include <glm/glm.hpp>
 
 #include <vector>
+#include <memory>
 
 using namespace AltheaEngine;
 
@@ -71,14 +73,6 @@ private:
   GlobalUniformsResource m_globalUniforms;
   GlobalResources m_globalResources;
 
-  void _createModels(Application& app, SingleTimeCommandBuffer& commandBuffer);
-  std::vector<Model> m_models;
-
-  void _createForwardPass(Application& app);
-  StructuredBuffer<PrimitiveConstants> m_primitiveConstantsBuffer; 
-  RenderPass m_forwardPass;
-  FrameBuffer m_forwardFrameBuffer;
-
   void _createDeferredPass(Application& app);
   RenderPass m_deferredPass;
   SwapChainFrameBufferCollection m_swapChainFrameBuffers;
@@ -88,9 +82,8 @@ private:
 
   SkeletonEditor m_skeletonEditor;
   SelectableScene m_debugScene;
-  ObjTestScene m_objTestScene;
 
-  ClothSim m_clothSim;
+  std::vector<std::unique_ptr<ISceneElement>> m_sceneElements;
 
   uint32_t m_inputMask = 0;
 };

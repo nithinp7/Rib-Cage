@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SceneElement.h"
 #include "AABBTree.h"
 #include "Collisions.h"
 
@@ -59,18 +60,19 @@ struct FixedPositionConstraint {
   alignas(4) uint32_t nodeIdx;
 };
 
-class ClothSim {
+class ClothSim : public ISceneElement{
 public:
   ClothSim() = default;
-  ClothSim(
+  virtual ~ClothSim() = default;
+  void init(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer,
       const GBufferResources& gBuffer,
-      GlobalHeap& heap);
+      GlobalHeap& heap) override;
 
-  void tryRecompileShaders(Application& app);
+  void tryRecompileShaders(Application& app) override;
 
-  void update(const FrameContext& frame);
+  void update(const FrameContext& frame) override;
 
   void draw(
       const Application& app,
@@ -78,9 +80,9 @@ public:
       const FrameContext& frame,
       VkDescriptorSet heapSet,
       BufferHandle globalResourcesHandle,
-      UniformHandle globalUniformsHandle);
+      UniformHandle globalUniformsHandle) override;
 
-  void updateUI();
+  void updateUI() override;
 
 private:
   void _resetPositions();
