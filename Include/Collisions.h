@@ -7,8 +7,9 @@
 #include <Althea/BindlessHandle.h>
 #include <Althea/Containers/StridedView.h>
 #include <Althea/FrameContext.h>
-#include <Althea/RenderPass.h>
 #include <Althea/Framebuffer.h>
+#include <Althea/RenderPass.h>
+#include <Althea/IntrusivePtr.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
@@ -66,6 +67,7 @@ public:
   const std::vector<EdgeCollision>& getEdgeCollisions() const {
     return m_edgeCollisions;
   }
+
 private:
   std::vector<PointPointCollision> m_pointCollisions;
   std::vector<PointTriangleCollision> m_triangleCollisions;
@@ -77,9 +79,7 @@ public:
   CollisionsManager() = default;
   CollisionsManager(
       Application& app,
-      VkCommandBuffer commandBuffer,
-      const GBufferResources& gBuffer,
-      GlobalHeap& heap);
+      SceneToGBufferPassBuilder& gBufferPassBuilder);
 
   void updateUI();
   void update(
@@ -89,13 +89,6 @@ public:
       const StridedView<glm::vec3>& prevPositions,
       const AABBTree& aabb);
 
-  void draw(
-      const Application& app,
-      VkCommandBuffer commandBuffer,
-      const FrameContext& frame,
-      VkDescriptorSet heapSet,
-      UniformHandle globalUniformsHandle);
-
   const Collisions& getCollisions() const { return m_collisions; }
 
   bool shouldVisualizeCollisions() const;
@@ -103,7 +96,7 @@ public:
 
 private:
   Collisions m_collisions;
-  
-  DebugVisualizationScene m_dbgViz;
+
+  IntrusivePtr<DebugVisualizationScene> m_dbgViz;
 };
 } // namespace RibCage

@@ -5,13 +5,16 @@
 #include <Althea/DeferredRendering.h>
 #include <Althea/FrameContext.h>
 #include <Althea/GlobalHeap.h>
+#include <Althea/IntrusivePtr.h>
 #include <Althea/SingleTimeCommandBuffer.h>
 #include <vulkan/vulkan.h>
+
+#include <memory>
 
 using namespace AltheaEngine;
 
 namespace RibCage {
-class ISceneElement {
+class ISceneElement : public virtual RefCounted {
 public:
   ISceneElement() = default;
   virtual ~ISceneElement() = default;
@@ -19,25 +22,18 @@ public:
   virtual void init(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer,
-      const GBufferResources& gBuffer,
+      SceneToGBufferPassBuilder& gBufferPassBuilder,
       GlobalHeap& heap) = 0;
-
-  virtual bool hasGBufferPass() const { return false; }
-  virtual void registerGBufferPass(GraphicsPipelineBuilder& builder) const {}
 
   virtual void tryRecompileShaders(Application& app) {}
 
   virtual void update(const FrameContext& frame) {}
 
-  virtual void draw(
+  virtual void preDraw(
       const Application& app,
       VkCommandBuffer commandBuffer,
       const FrameContext& frame,
       VkDescriptorSet heapSet,
-      BufferHandle globalResourcesHandle,
-      UniformHandle globalUniformsHandle) {}
-  virtual void drawGBuffer(
-      const DrawContext& context,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) {}
 

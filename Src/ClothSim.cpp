@@ -30,7 +30,8 @@ void ClothSim::_resetPositions() {
     }
   }
 }
-void ClothSim::registerGBufferPass(GraphicsPipelineBuilder& builder) const {
+
+void ClothSim::registerGBufferSubpass(GraphicsPipelineBuilder& builder) const {
   builder
       .setCullMode(VK_CULL_MODE_NONE)
 
@@ -43,7 +44,7 @@ void ClothSim::registerGBufferPass(GraphicsPipelineBuilder& builder) const {
 void ClothSim::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
-    const GBufferResources& gBuffer,
+    SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
   m_uniforms = TransientUniforms<ClothUniforms>(app);
   m_uniforms.registerToHeap(heap);
@@ -132,20 +133,21 @@ void ClothSim::init(
   }
 
   // Setup AABB
-  m_aabb = AABBManager(
+  m_aabb = makeIntrusive<AABBManager>(
       app,
-      gBuffer,
       heap,
       m_clothSections[0].indices.getIndexCount() / 3);
 
-  m_collisions = CollisionsManager(app, commandBuffer, gBuffer, heap);
+  // GBuffer subpasses
+  gBufferPassBuilder.registerSubpass(this);
+  gBufferPassBuilder.registerSubpass(m_aabb);
+
+  m_collisions = CollisionsManager(app, gBufferPassBuilder);
 }
 
 void ClothSim::tryRecompileShaders(Application& app) {
   for (ComputePipeline& computePass : m_solvePasses)
     computePass.tryRecompile(app);
-
-  m_aabb.tryRecompile(app);
 }
 
 static bool s_simPaused = false;
@@ -606,14 +608,14 @@ void ClothSim::update(const FrameContext& frame) {
     {
       const std::vector<glm::vec3>& positions = m_nodePositions.getVertices();
 
-      m_aabb.update(
+      m_aabb->update(
           indices,
           positions,
           m_prevPositions,
           m_collisions.getThresholdDistance(),
           frame);
       m_collisions
-          .update(frame, indices, positions, m_prevPositions, m_aabb.getTree());
+          .update(frame, indices, positions, m_prevPositions, m_aabb->getTree());
     }
     for (int step = 0; step < s_solverSubsteps; ++step) {
 
@@ -679,7 +681,7 @@ void ClothSim::update(const FrameContext& frame) {
   m_nodeFlags.upload(frame.frameRingBufferIndex);
 }
 
-void ClothSim::draw(
+void ClothSim::preDraw(
     const Application& app,
     VkCommandBuffer commandBuffer,
     const FrameContext& frame,
@@ -707,20 +709,9 @@ void ClothSim::draw(
 
     m_uniforms.updateUniforms(uniforms, frame);
   }
-
-  // TODO: These should also be registered directly into the gbuffer pass...
-  m_aabb.debugDraw(
-      app,
-      commandBuffer,
-      frame,
-      heapSet,
-      globalResourcesHandle,
-      globalUniformsHandle);
-
-  m_collisions.draw(app, commandBuffer, frame, heapSet, globalUniformsHandle);
 }
 
-void ClothSim::drawGBuffer(
+void ClothSim::beginGBufferSubpass(
     const DrawContext& context,
     BufferHandle globalResourcesHandle,
     UniformHandle globalUniformsHandle) {
@@ -830,7 +821,7 @@ void ClothSim::updateUI() {
     ImGui::Unindent();
   }
 
-  m_aabb.updateUI();
+  m_aabb->updateUI();
   m_collisions.updateUI();
 }
 } // namespace RibCage

@@ -42,8 +42,8 @@ bool AABBTree::hasChildB(const AABBInnerNode* pNode) const {
 
 // TODO: Some sort of SSE way to do this via glm?
 static bool intersect(float minA, float maxA, float minB, float maxB) {
-  minA <= minB && maxA >= minB;
-  minA >= minB && maxA <= maxB;
+  minA <= minB&& maxA >= minB;
+  minA >= minB&& maxA <= maxB;
 
   if (minA <= minB) {
     return maxA >= minB;
@@ -57,13 +57,13 @@ static bool intersect(
     const glm::vec3& maxA,
     const glm::vec3& minB,
     const glm::vec3& maxB) {
-  return 
-    intersect(minA.x, maxA.x, minB.x, maxB.x) &&
-    intersect(minA.y, maxA.y, minB.y, maxB.y) &&
-    intersect(minA.z, maxA.z, minB.z, maxB.z);
+  return intersect(minA.x, maxA.x, minB.x, maxB.x) &&
+         intersect(minA.y, maxA.y, minB.y, maxB.y) &&
+         intersect(minA.z, maxA.z, minB.z, maxB.z);
 }
 
-bool AABBInnerNode::intersect(const glm::vec3& minB, const glm::vec3& maxB) const {
+bool AABBInnerNode::intersect(const glm::vec3& minB, const glm::vec3& maxB)
+    const {
   return RibCage::intersect(min, max, minB, maxB);
 }
 
@@ -111,7 +111,7 @@ void AABBTree::refitTriangles(
 
     AABBLeaf& leaf = m_leaves.emplace_back();
     leaf.min = glm::vec3(std::numeric_limits<float>::max());
-    leaf.max = glm::vec3(std::numeric_limits<float>::lowest()); 
+    leaf.max = glm::vec3(std::numeric_limits<float>::lowest());
     for (uint32_t j = 0; j < 3; ++j) {
       const glm::vec3& p0 = positions[tris[3 * i + j]];
       const glm::vec3& p1 = prevPositions[tris[3 * i + j]];
@@ -121,7 +121,7 @@ void AABBTree::refitTriangles(
 
     leaf.min -= glm::vec3(padding);
     leaf.max += glm::vec3(padding);
-    
+
     leaf.triIdx = i;
   }
 
@@ -208,40 +208,8 @@ void AABBTree::populateInnerNode(gsl::span<uint32_t> sortedLeaves) {
 
 AABBManager::AABBManager(
     Application& app,
-    const GBufferResources& gBuffer,
     GlobalHeap& heap,
     uint32_t leafCount) {
-  std::vector<SubpassBuilder> builders;
-  {
-    SubpassBuilder& builder = builders.emplace_back();
-
-    GBufferResources::setupAttachments(builder);
-
-    builder.pipelineBuilder.setPrimitiveType(PrimitiveType::LINES)
-        .setLineWidth(2.0f)
-        .addVertexShader(GProjectDirectory + "/Shaders/BVH/AABBWireframe.vert")
-        .addFragmentShader(
-            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
-        .layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
-        .addPushConstants<AABBPushConstants>(VK_SHADER_STAGE_ALL);
-  }
-
-  std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
-  for (auto& attachment : attachments)
-    attachment.load = true;
-
-  m_dbgRenderPass = RenderPass(
-      app,
-      app.getSwapChainExtent(),
-      std::move(attachments),
-      std::move(builders));
-
-  m_dbgFrameBuffer = FrameBuffer(
-      app,
-      m_dbgRenderPass,
-      app.getSwapChainExtent(),
-      gBuffer.getAttachmentViewsA());
-
   m_tree = AABBTree(app, heap, leafCount);
 }
 
@@ -272,35 +240,40 @@ void AABBManager::updateUI() {
   }
 }
 
-void AABBManager::debugDraw(
-    const Application& app,
-    VkCommandBuffer commandBuffer,
-    const FrameContext& frame,
-    VkDescriptorSet heapSet,
+// IGBufferSubpass impl
+void AABBManager::registerGBufferSubpass(
+    GraphicsPipelineBuilder& builder) const {
+
+  builder.setPrimitiveType(PrimitiveType::LINES)
+      .setLineWidth(2.0f)
+      .addVertexShader(GProjectDirectory + "/Shaders/BVH/AABBWireframe.vert")
+      .addFragmentShader(GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+      .layoutBuilder.addPushConstants<AABBPushConstants>(VK_SHADER_STAGE_ALL);
+}
+
+void AABBManager::beginGBufferSubpass(
+    const DrawContext& context,
     BufferHandle globalResources,
-    UniformHandle globalUniforms) const {
+    UniformHandle globalUniforms) {
 
   AABBPushConstants push{};
   push.globalResources = globalResources.index;
   push.globalUniforms = globalUniforms.index;
-  push.handles = m_tree.getHandles(frame.frameRingBufferIndex);
+  push.handles = m_tree.getHandles(context.getFrame().frameRingBufferIndex);
 
   {
-    ActiveRenderPass pass =
-        m_dbgRenderPass.begin(app, commandBuffer, frame, m_dbgFrameBuffer);
-    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
-    pass.getDrawContext().bindDescriptorSets();
+    context.bindDescriptorSets();
 
     if (s_showAABBLeaves) {
       push.flags = 0; // leaf nodes
-      pass.getDrawContext().updatePushConstants(push, 0);
-      pass.getDrawContext().draw(24, m_tree.getLeafCount());
+      context.updatePushConstants(push, 0);
+      context.draw(24, m_tree.getLeafCount());
     }
 
     if (s_showAABBInnerNodes) {
       push.flags = 1; // inner nodes
-      pass.getDrawContext().updatePushConstants(push, 0);
-      pass.getDrawContext().draw(24, m_tree.getInnerNodeCount());
+      context.updatePushConstants(push, 0);
+      context.draw(24, m_tree.getInnerNodeCount());
     }
   }
 }

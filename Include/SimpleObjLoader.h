@@ -47,28 +47,26 @@ bool loadObj(
     
 } // namespace SimpleObjLoader
 
-class ObjTestScene : public ISceneElement {
+class ObjTestScene : public ISceneElement, public IGBufferSubpass {
 public:
   ObjTestScene() = default;
   virtual ~ObjTestScene() = default;
   
+  // ISceneElement impl
   void init(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer,
-      const GBufferResources& gBuffer,
+      SceneToGBufferPassBuilder& gBufferPassBuilder,
       GlobalHeap& heap) override;
-
-  bool hasGBufferPass() const override { return true; }
-  void registerGBufferPass(GraphicsPipelineBuilder& builder) const override;
-
   void update(const FrameContext& frame) override;
+  void updateUI() override;
 
-  void drawGBuffer(
+  // IGBufferSubpass impl
+  void registerGBufferSubpass(GraphicsPipelineBuilder& builder) const override;
+  void beginGBufferSubpass(
       const DrawContext& context,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) override;
-
-  void updateUI() override;
 
 private:
   std::vector<SimpleObjLoader::LoadedObj> m_objects;

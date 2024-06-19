@@ -64,7 +64,7 @@ void RibCage::initGame(Application& app) {
         that->m_debugScene.tryRecompileShaders(app);
         that->m_skeletonEditor.tryRecompileShaders(app);
 
-        that->m_gBufferPass.tryRecompile(app);
+        that->m_gBufferPass.tryRecompileShaders(app);
 
         for (auto& sceneElem : that->m_sceneElements)
           sceneElem->tryRecompileShaders(app);
@@ -93,7 +93,6 @@ void RibCage::createRenderState(Application& app) {
   SingleTimeCommandBuffer commandBuffer(app);
 
   _createGlobalResources(app, commandBuffer);
-  _createGBufferPass(app);
   _createDeferredPass(app);
 }
 
@@ -101,6 +100,8 @@ void RibCage::destroyRenderState(Application& app) {
   Primitive::resetPrimitiveIndexCount();
 
   Gui::destroyRenderState(app);
+
+  m_gBufferPass = {};
 
   m_deferredPass = {};
   m_swapChainFrameBuffers = {};
@@ -114,9 +115,6 @@ void RibCage::destroyRenderState(Application& app) {
   m_skeletonEditor = {};
   m_debugScene = {};
 
-  m_gBufferPass = {};
-  m_gBufferPassFB_A = {};
-  m_gBufferPassFB_B = {};
   m_sceneElements.clear();
 }
 
@@ -253,57 +251,19 @@ void RibCage::_createGlobalResources(
       m_globalHeap,
       m_globalResources.getGBuffer());
 
-  m_sceneElements.emplace_back(new ClothSim);
-  m_sceneElements.emplace_back(new ObjTestScene);
+  m_sceneElements.emplace_back(makeIntrusive<ClothSim>());
+  m_sceneElements.emplace_back(makeIntrusive<ObjTestScene>());
+
+  SceneToGBufferPassBuilder gBufferPassBuilder{};
 
   for (auto& sceneElem : m_sceneElements)
-    sceneElem->init(
-        app,
-        commandBuffer,
-        m_globalResources.getGBuffer(),
-        m_globalHeap);
-}
+    sceneElem->init(app, commandBuffer, gBufferPassBuilder, m_globalHeap);
 
-void RibCage::_createGBufferPass(Application& app) {
-  VkClearValue colorClear;
-  colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-
-  std::vector<Attachment> attachments =
-      m_globalResources.getGBuffer().getAttachmentDescriptions();
-
-  std::vector<SubpassBuilder> subpassBuilders;
-
-  for (auto& sceneElem : m_sceneElements) {
-    if (!sceneElem->hasGBufferPass())
-      continue;
-
-    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
-    GBufferResources::setupAttachments(subpassBuilder);
-
-    subpassBuilder.pipelineBuilder.layoutBuilder.addDescriptorSet(
-        m_globalHeap.getDescriptorSetLayout());
-    sceneElem->registerGBufferPass(subpassBuilder.pipelineBuilder);
-  }
-
-  if (subpassBuilders.size() == 0)
-    return;
-
-  m_gBufferPass = RenderPass(
+  m_gBufferPass = SceneToGBufferPass(
       app,
-      app.getSwapChainExtent(),
-      std::move(attachments),
-      std::move(subpassBuilders));
-
-  m_gBufferPassFB_A = FrameBuffer(
-      app,
-      m_gBufferPass,
-      app.getSwapChainExtent(),
-      m_globalResources.getGBuffer().getAttachmentViewsA());
-  m_gBufferPassFB_B = FrameBuffer(
-      app,
-      m_gBufferPass,
-      app.getSwapChainExtent(),
-      m_globalResources.getGBuffer().getAttachmentViewsB());
+      m_globalResources.getGBuffer(),
+      m_globalHeap.getDescriptorSetLayout(),
+      std::move(gBufferPassBuilder));
 }
 
 void RibCage::_createDeferredPass(Application& app) {
@@ -349,15 +309,6 @@ void RibCage::_createDeferredPass(Application& app) {
       SwapChainFrameBufferCollection(app, m_deferredPass, {});
 }
 
-namespace {
-struct DrawableEnvMap {
-  void draw(const DrawContext& context) const {
-    context.bindDescriptorSets();
-    context.draw(3);
-  }
-};
-} // namespace
-
 void RibCage::draw(
     Application& app,
     VkCommandBuffer commandBuffer,
@@ -381,7 +332,7 @@ void RibCage::draw(
       m_globalUniforms.getCurrentBindlessHandle(frame));
 
   for (auto& sceneElem : m_sceneElements)
-    sceneElem->draw(
+    sceneElem->preDraw(
         app,
         commandBuffer,
         frame,
@@ -389,29 +340,13 @@ void RibCage::draw(
         m_globalResources.getHandle(),
         m_globalUniforms.getCurrentBindlessHandle(frame));
 
-  if (VkRenderPass(m_gBufferPass) != VK_NULL_HANDLE) {
-    ActiveRenderPass pass = m_gBufferPass.begin(
-        app,
-        commandBuffer,
-        frame,
-        m_gBufferPhase ? m_gBufferPassFB_A : m_gBufferPassFB_B);
-
-    pass.setGlobalDescriptorSet(heapDescriptorSet);
-
-    for (auto& sceneElem : m_sceneElements) {
-      if (sceneElem->hasGBufferPass()) {
-        sceneElem->drawGBuffer(
-            pass.getDrawContext(),
-            m_globalResources.getHandle(),
-            m_globalUniforms.getCurrentBindlessHandle(frame));
-
-        if (!pass.isLastSubpass())
-          pass.nextSubpass();
-      }
-    }
-
-    m_gBufferPhase = !m_gBufferPhase;
-  }
+  m_gBufferPass.begin(
+      app,
+      commandBuffer,
+      frame,
+      heapDescriptorSet,
+      m_globalResources.getHandle(),
+      m_globalUniforms.getCurrentBindlessHandle(frame));
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
 

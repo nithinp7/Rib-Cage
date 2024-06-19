@@ -17,6 +17,7 @@
 #include <Althea/ImageBasedLighting.h>
 #include <Althea/ImageResource.h>
 #include <Althea/ImageView.h>
+#include <Althea/IntrusivePtr.h>
 #include <Althea/Model.h>
 #include <Althea/PerFrameResources.h>
 #include <Althea/RenderPass.h>
@@ -72,12 +73,7 @@ private:
   GlobalHeap m_globalHeap;
   GlobalUniformsResource m_globalUniforms;
   GlobalResources m_globalResources;
-
-  void _createGBufferPass(Application& app);
-  bool m_gBufferPhase = true;
-  RenderPass m_gBufferPass;
-  FrameBuffer m_gBufferPassFB_A;
-  FrameBuffer m_gBufferPassFB_B;
+  SceneToGBufferPass m_gBufferPass;
 
   void _createDeferredPass(Application& app);
   RenderPass m_deferredPass;
@@ -89,7 +85,7 @@ private:
   SkeletonEditor m_skeletonEditor;
   SelectableScene m_debugScene;
 
-  std::vector<std::unique_ptr<ISceneElement>> m_sceneElements;
+  std::vector<IntrusivePtr<ISceneElement>> m_sceneElements;
 
   uint32_t m_inputMask = 0;
 };

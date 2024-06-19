@@ -40,23 +40,18 @@ struct SceneQueryResult {
 };
 
 // Debug visualization scene
-class DebugVisualizationScene {
+class DebugVisualizationScene : public IGBufferSubpass {
 public:
   DebugVisualizationScene() = default;
-  DebugVisualizationScene(
-      Application& app,
-      GlobalHeap& heap,
-      VkCommandBuffer commandBuffer,
-      const GBufferResources& gBuffer);
+  DebugVisualizationScene(Application& app);
 
-  void draw(
-      const Application& app,
-      VkCommandBuffer commandBuffer,
-      const FrameContext& frame,
-      VkDescriptorSet heapSet,
-      UniformHandle globalUniformsHandle,
-      float scale = 1.0f);
-      
+  // IGBufferSubpass impl
+  void registerGBufferSubpass(GraphicsPipelineBuilder& builder) const override;
+  void beginGBufferSubpass(
+      const DrawContext& context,
+      BufferHandle globalResourcesHandle,
+      UniformHandle globalUniformsHandle) override;
+
   void reset() { m_lineCount = 0; }
   bool addLine(const glm::vec3& a, const glm::vec3& b, uint32_t color) {
     if (m_lineCount < MAX_DBG_LINES) {
@@ -76,9 +71,6 @@ private:
   };
   DynamicVertexBuffer<DebugVert> m_lines;
   uint32_t m_lineCount = 0;
-
-  RenderPass m_pass;
-  FrameBuffer m_frameBuffer;
 };
 
 // Debug scene elements that are selectable

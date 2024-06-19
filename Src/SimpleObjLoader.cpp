@@ -174,13 +174,14 @@ struct PushConstants {
 void ObjTestScene::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
-    const GBufferResources& gBuffer,
+    SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
   std::string path = GProjectDirectory + "/Data/ImportedModels/testExport.obj";
   loadObj(app, commandBuffer, path.c_str(), m_objects.emplace_back());
+  gBufferPassBuilder.registerSubpass(this);
 }
 
-void ObjTestScene::registerGBufferPass(GraphicsPipelineBuilder& builder) const {
+void ObjTestScene::registerGBufferSubpass(GraphicsPipelineBuilder& builder) const {
   // TODO: turn back-face culling back on...
   builder.setCullMode(VK_CULL_MODE_NONE)
       .addVertexInputBinding<ObjVert>()
@@ -197,7 +198,7 @@ void ObjTestScene::registerGBufferPass(GraphicsPipelineBuilder& builder) const {
 
 void ObjTestScene::update(const FrameContext& frame) {}
 
-void ObjTestScene::drawGBuffer(
+void ObjTestScene::beginGBufferSubpass(
     const DrawContext& context,
     BufferHandle globalResourcesHandle,
     UniformHandle globalUniformsHandle) {

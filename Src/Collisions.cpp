@@ -618,10 +618,9 @@ void Collisions::update(
 
 CollisionsManager::CollisionsManager(
     Application& app,
-    VkCommandBuffer commandBuffer,
-    const GBufferResources& gBuffer,
-    GlobalHeap& heap) {
-  m_dbgViz = DebugVisualizationScene(app, heap, commandBuffer, gBuffer);
+    SceneToGBufferPassBuilder& gBufferPassBuilder)
+    : m_dbgViz(makeIntrusive<DebugVisualizationScene>(app)) {
+  gBufferPassBuilder.registerSubpass(m_dbgViz);
 }
 
 void CollisionsManager::updateUI() {
@@ -663,7 +662,7 @@ void CollisionsManager::update(
       .update(indices, positions, prevPositions, s_thresholdDistance, aabb);
 
   if (s_bVisualizeCollisions) {
-    m_dbgViz.reset();
+    m_dbgViz->reset();
 
     if (s_collisionMode == 0) {
       if (s_visualizationMode == 1 || s_visualizationMode == 2) {
@@ -680,12 +679,12 @@ void CollisionsManager::update(
               (1.0f - col.bcx - col.bcy) * a + col.bcx * b + col.bcy * c;
 
           uint32_t orange = 0xffaa00ff;
-          m_dbgViz.addLine(p, projP, orange);
+          m_dbgViz->addLine(p, projP, orange);
 
           uint32_t purple = 0xff00ffff;
-          m_dbgViz.addLine(a, b, purple);
-          m_dbgViz.addLine(b, c, purple);
-          m_dbgViz.addLine(c, a, purple);
+          m_dbgViz->addLine(a, b, purple);
+          m_dbgViz->addLine(b, c, purple);
+          m_dbgViz->addLine(c, a, purple);
         }
       }
 
@@ -705,38 +704,21 @@ void CollisionsManager::update(
 
           // involved edges in green
           uint32_t green = 0x00ff00ff;
-          m_dbgViz.addLine(a, b, green);
-          m_dbgViz.addLine(c, d, green);
+          m_dbgViz->addLine(a, b, green);
+          m_dbgViz->addLine(c, d, green);
 
           // computed closest distance in red
           uint32_t red = 0xff0000ff;
-          m_dbgViz.addLine(p0, p1, red);
+          m_dbgViz->addLine(p0, p1, red);
         }
       }
     } else {
       for (const PointPointCollision& c : m_collisions.getPointCollisions()) {
         const glm::vec3& p0 = positions[indices[3 * c.triIdxA + c.pointIdxA]];
         const glm::vec3& p1 = positions[indices[3 * c.triIdxB + c.pointIdxB]];
-        m_dbgViz.addLine(p0, p1, 0xff0000ff);
+        m_dbgViz->addLine(p0, p1, 0xff0000ff);
       }
     }
-  }
-}
-
-void CollisionsManager::draw(
-    const Application& app,
-    VkCommandBuffer commandBuffer,
-    const FrameContext& frame,
-    VkDescriptorSet heapSet,
-    UniformHandle globalUniformsHandle) {
-  if (s_bVisualizeCollisions) {
-    m_dbgViz.draw(
-        app,
-        commandBuffer,
-        frame,
-        heapSet,
-        globalUniformsHandle,
-        s_thresholdDistance);
   }
 }
 

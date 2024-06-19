@@ -12,6 +12,7 @@
 #include <Althea/DynamicVertexBuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/IndexBuffer.h>
+#include <Althea/IntrusivePtr.h>
 #include <Althea/RenderPass.h>
 #include <Althea/SingleTimeCommandBuffer.h>
 #include <Althea/StructuredBuffer.h>
@@ -60,37 +61,34 @@ struct FixedPositionConstraint {
   alignas(4) uint32_t nodeIdx;
 };
 
-class ClothSim : public ISceneElement{
+class ClothSim : public ISceneElement, public IGBufferSubpass{
 public:
   ClothSim() = default;
   virtual ~ClothSim() = default;
+
+  // ISceneElement impl
   void init(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer,
-      const GBufferResources& gBuffer,
+      SceneToGBufferPassBuilder& gBufferPassBuilder,
       GlobalHeap& heap) override;
-
-  bool hasGBufferPass() const override { return true; }
-  void registerGBufferPass(GraphicsPipelineBuilder& builder) const override;
-
   void tryRecompileShaders(Application& app) override;
-
   void update(const FrameContext& frame) override;
-
-  void drawGBuffer(
-      const DrawContext& context,
-      BufferHandle globalResourcesHandle,
-      UniformHandle globalUniformsHandle) override;
-
-  void draw(
+  void preDraw(
       const Application& app,
       VkCommandBuffer commandBuffer,
       const FrameContext& frame,
       VkDescriptorSet heapSet,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) override;
-    
   void updateUI() override;
+
+  // IGBufferSubpass impl
+  void registerGBufferSubpass(GraphicsPipelineBuilder& builder) const override;
+  void beginGBufferSubpass(
+      const DrawContext& context,
+      BufferHandle globalResourcesHandle,
+      UniformHandle globalUniformsHandle) override;
 
 private:
   void _resetPositions();
@@ -124,7 +122,7 @@ private:
 
   std::vector<ClothSection> m_clothSections;
 
-  AABBManager m_aabb;
+  IntrusivePtr<AABBManager> m_aabb;
   CollisionsManager m_collisions;
 };
 } // namespace RibCage

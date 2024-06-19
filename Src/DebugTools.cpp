@@ -27,85 +27,47 @@ struct DebugLinePush {
 };
 } // namespace
 namespace RibCage {
-DebugVisualizationScene::DebugVisualizationScene(
-    Application& app,
-    GlobalHeap& heap,
-    VkCommandBuffer commandBuffer,
-    const GBufferResources& gBuffer) {
-
+DebugVisualizationScene::DebugVisualizationScene(Application& app) {
   m_lines = DynamicVertexBuffer<DebugVert>(app, 2 * MAX_DBG_LINES, true);
-
-  std::vector<SubpassBuilder> builders;
-
-  {
-    SubpassBuilder& builder = builders.emplace_back();
-
-    GBufferResources::setupAttachments(builder);
-
-    builder.pipelineBuilder.setPrimitiveType(PrimitiveType::LINES)
-        .setLineWidth(2.5f)
-        .addVertexInputBinding<DebugVert>(VK_VERTEX_INPUT_RATE_VERTEX)
-        .addVertexAttribute(
-            VertexAttributeType::VEC3,
-            offsetof(DebugVert, position))
-        .addVertexAttribute(
-            VertexAttributeType::UINT,
-            offsetof(DebugVert, color))
-
-        .addVertexShader(GProjectDirectory + "/Shaders/Debug/DebugLine.vert")
-        .addFragmentShader(
-            GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
-
-        .layoutBuilder //
-        .addDescriptorSet(heap.getDescriptorSetLayout())
-        .addPushConstants<DebugLinePush>(VK_SHADER_STAGE_ALL);
-  }
-
-  std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
-  for (auto& attachment : attachments)
-    attachment.load = true;
-
-  m_pass = RenderPass(
-      app,
-      app.getSwapChainExtent(),
-      std::move(attachments),
-      std::move(builders));
-  m_frameBuffer = FrameBuffer(
-      app,
-      m_pass,
-      app.getSwapChainExtent(),
-      gBuffer.getAttachmentViewsA());
 }
 
-void DebugVisualizationScene::draw(
-    const Application& app,
-    VkCommandBuffer commandBuffer,
-    const FrameContext& frame,
-    VkDescriptorSet heapSet,
-    UniformHandle globalUniformsHandle,
-    float scale) {
+// IGBufferSubpass impl
+void DebugVisualizationScene::registerGBufferSubpass(
+    GraphicsPipelineBuilder& builder) const {
+
+  builder.setPrimitiveType(PrimitiveType::LINES)
+      .setLineWidth(2.5f)
+      .addVertexInputBinding<DebugVert>(VK_VERTEX_INPUT_RATE_VERTEX)
+      .addVertexAttribute(
+          VertexAttributeType::VEC3,
+          offsetof(DebugVert, position))
+      .addVertexAttribute(VertexAttributeType::UINT, offsetof(DebugVert, color))
+
+      .addVertexShader(GProjectDirectory + "/Shaders/Debug/DebugLine.vert")
+      .addFragmentShader(GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+
+      .layoutBuilder //
+      .addPushConstants<DebugLinePush>(VK_SHADER_STAGE_ALL);
+}
+
+void DebugVisualizationScene::beginGBufferSubpass(
+    const DrawContext& context,
+    BufferHandle globalResources,
+    UniformHandle globalUniforms) {
+  const FrameContext& frame = context.getFrame();
 
   m_lines.upload(frame.frameRingBufferIndex);
   {
-    ActiveRenderPass pass =
-        m_pass.begin(app, commandBuffer, frame, m_frameBuffer);
+    DebugLinePush constants{};
+    constants.globalUniforms = globalUniforms.index;
 
-    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
+    context.updatePushConstants(constants, 0);
+    context.bindDescriptorSets();
 
-    const DrawContext& context = pass.getDrawContext();
-    {
-      DebugLinePush constants{};
-      constants.globalUniforms = globalUniformsHandle.index;
-
-      context.updatePushConstants(constants, 0);
-      context.bindDescriptorSets();
-
-      VkBuffer vb = m_lines.getBuffer();
-      size_t offset =
-          m_lines.getCurrentBufferOffset(frame.frameRingBufferIndex);
-      vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vb, &offset);
-      context.draw(2 * m_lineCount);
-    }
+    VkBuffer vb = m_lines.getBuffer();
+    size_t offset = m_lines.getCurrentBufferOffset(frame.frameRingBufferIndex);
+    vkCmdBindVertexBuffers(context.getCommandBuffer(), 0, 1, &vb, &offset);
+    context.draw(2 * m_lineCount);
   }
 }
 
