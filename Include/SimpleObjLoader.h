@@ -58,23 +58,19 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap) override;
 
-  void tryRecompileShaders(Application& app) override;
+  bool hasGBufferPass() const override { return true; }
+  void registerGBufferPass(GraphicsPipelineBuilder& builder) const override;
 
   void update(const FrameContext& frame) override;
 
-  void draw(
-      const Application& app,
-      VkCommandBuffer commandBuffer,
-      const FrameContext& frame,
-      VkDescriptorSet heapSet,
+  void drawGBuffer(
+      const DrawContext& context,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) override;
 
   void updateUI() override;
 
 private:
-  RenderPass m_renderPass;
-  FrameBuffer m_frameBuffer;
   std::vector<SimpleObjLoader::LoadedObj> m_objects;
 };
 } // namespace RibCage

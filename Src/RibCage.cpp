@@ -64,6 +64,8 @@ void RibCage::initGame(Application& app) {
         that->m_debugScene.tryRecompileShaders(app);
         that->m_skeletonEditor.tryRecompileShaders(app);
 
+        that->m_gBufferPass.tryRecompile(app);
+
         for (auto& sceneElem : that->m_sceneElements)
           sceneElem->tryRecompileShaders(app);
       });
@@ -91,6 +93,7 @@ void RibCage::createRenderState(Application& app) {
   SingleTimeCommandBuffer commandBuffer(app);
 
   _createGlobalResources(app, commandBuffer);
+  _createGBufferPass(app);
   _createDeferredPass(app);
 }
 
@@ -111,6 +114,9 @@ void RibCage::destroyRenderState(Application& app) {
   m_skeletonEditor = {};
   m_debugScene = {};
 
+  m_gBufferPass = {};
+  m_gBufferPassFB_A = {};
+  m_gBufferPassFB_B = {};
   m_sceneElements.clear();
 }
 
@@ -226,12 +232,7 @@ void RibCage::_createGlobalResources(
   m_globalHeap = GlobalHeap(app);
   m_globalUniforms = GlobalUniformsResource(app, m_globalHeap);
 
-  m_globalResources = GlobalResources(
-      app,
-      commandBuffer,
-      m_globalHeap,
-      {},
-      {});
+  m_globalResources = GlobalResources(app, commandBuffer, m_globalHeap, {}, {});
 
   // Set up SSR resources
   m_SSR = ScreenSpaceReflection(
@@ -263,6 +264,48 @@ void RibCage::_createGlobalResources(
         m_globalHeap);
 }
 
+void RibCage::_createGBufferPass(Application& app) {
+  VkClearValue colorClear;
+  colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+
+  std::vector<Attachment> attachments =
+      m_globalResources.getGBuffer().getAttachmentDescriptions();
+
+  std::vector<SubpassBuilder> subpassBuilders;
+
+  for (auto& sceneElem : m_sceneElements) {
+    if (!sceneElem->hasGBufferPass())
+      continue;
+
+    SubpassBuilder& subpassBuilder = subpassBuilders.emplace_back();
+    GBufferResources::setupAttachments(subpassBuilder);
+
+    subpassBuilder.pipelineBuilder.layoutBuilder.addDescriptorSet(
+        m_globalHeap.getDescriptorSetLayout());
+    sceneElem->registerGBufferPass(subpassBuilder.pipelineBuilder);
+  }
+
+  if (subpassBuilders.size() == 0)
+    return;
+
+  m_gBufferPass = RenderPass(
+      app,
+      app.getSwapChainExtent(),
+      std::move(attachments),
+      std::move(subpassBuilders));
+
+  m_gBufferPassFB_A = FrameBuffer(
+      app,
+      m_gBufferPass,
+      app.getSwapChainExtent(),
+      m_globalResources.getGBuffer().getAttachmentViewsA());
+  m_gBufferPassFB_B = FrameBuffer(
+      app,
+      m_gBufferPass,
+      app.getSwapChainExtent(),
+      m_globalResources.getGBuffer().getAttachmentViewsB());
+}
+
 void RibCage::_createDeferredPass(Application& app) {
   VkClearValue colorClear;
   colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -289,8 +332,7 @@ void RibCage::_createDeferredPass(Application& app) {
         // Vertex shader
         .addVertexShader(GProjectDirectory + "/Shaders/DeferredPass.vert")
         // Fragment shader
-        .addFragmentShader(
-            GProjectDirectory + "/Shaders/DeferredPass.frag")
+        .addFragmentShader(GProjectDirectory + "/Shaders/DeferredPass.frag")
 
         // Pipeline resource layouts
         .layoutBuilder.addDescriptorSet(m_globalHeap.getDescriptorSetLayout())
@@ -346,6 +388,30 @@ void RibCage::draw(
         heapDescriptorSet,
         m_globalResources.getHandle(),
         m_globalUniforms.getCurrentBindlessHandle(frame));
+
+  if (VkRenderPass(m_gBufferPass) != VK_NULL_HANDLE) {
+    ActiveRenderPass pass = m_gBufferPass.begin(
+        app,
+        commandBuffer,
+        frame,
+        m_gBufferPhase ? m_gBufferPassFB_A : m_gBufferPassFB_B);
+
+    pass.setGlobalDescriptorSet(heapDescriptorSet);
+
+    for (auto& sceneElem : m_sceneElements) {
+      if (sceneElem->hasGBufferPass()) {
+        sceneElem->drawGBuffer(
+            pass.getDrawContext(),
+            m_globalResources.getHandle(),
+            m_globalUniforms.getCurrentBindlessHandle(frame));
+
+        if (!pass.isLastSubpass())
+          pass.nextSubpass();
+      }
+    }
+
+    m_gBufferPhase = !m_gBufferPhase;
+  }
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
 

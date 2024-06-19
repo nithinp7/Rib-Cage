@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Althea/Application.h>
+#include <Althea/DrawContext.h>
 #include <Althea/DeferredRendering.h>
 #include <Althea/FrameContext.h>
 #include <Althea/GlobalHeap.h>
@@ -21,6 +22,9 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap) = 0;
 
+  virtual bool hasGBufferPass() const { return false; }
+  virtual void registerGBufferPass(GraphicsPipelineBuilder& builder) const {}
+
   virtual void tryRecompileShaders(Application& app) {}
 
   virtual void update(const FrameContext& frame) {}
@@ -30,6 +34,10 @@ public:
       VkCommandBuffer commandBuffer,
       const FrameContext& frame,
       VkDescriptorSet heapSet,
+      BufferHandle globalResourcesHandle,
+      UniformHandle globalUniformsHandle) {}
+  virtual void drawGBuffer(
+      const DrawContext& context,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) {}
 

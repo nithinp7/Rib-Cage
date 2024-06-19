@@ -70,9 +70,17 @@ public:
       const GBufferResources& gBuffer,
       GlobalHeap& heap) override;
 
+  bool hasGBufferPass() const override { return true; }
+  void registerGBufferPass(GraphicsPipelineBuilder& builder) const override;
+
   void tryRecompileShaders(Application& app) override;
 
   void update(const FrameContext& frame) override;
+
+  void drawGBuffer(
+      const DrawContext& context,
+      BufferHandle globalResourcesHandle,
+      UniformHandle globalUniformsHandle) override;
 
   void draw(
       const Application& app,
@@ -81,7 +89,7 @@ public:
       VkDescriptorSet heapSet,
       BufferHandle globalResourcesHandle,
       UniformHandle globalUniformsHandle) override;
-
+    
   void updateUI() override;
 
 private:
@@ -100,9 +108,6 @@ private:
   void _projectedGaussSeidelSolve();
 
   TransientUniforms<ClothUniforms> m_uniforms;
-
-  RenderPass m_renderPass;
-  FrameBuffer m_frameBuffer;
 
   std::vector<ComputePipeline> m_solvePasses;
 

@@ -30,6 +30,15 @@ void ClothSim::_resetPositions() {
     }
   }
 }
+void ClothSim::registerGBufferPass(GraphicsPipelineBuilder& builder) const {
+  builder
+      .setCullMode(VK_CULL_MODE_NONE)
+
+      .addVertexShader(GProjectDirectory + "/Shaders/Cloth/Cloth.vert")
+      .addFragmentShader(GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
+
+      .layoutBuilder.addPushConstants<PushConstants>();
+}
 
 void ClothSim::init(
     Application& app,
@@ -38,40 +47,6 @@ void ClothSim::init(
     GlobalHeap& heap) {
   m_uniforms = TransientUniforms<ClothUniforms>(app);
   m_uniforms.registerToHeap(heap);
-
-  {
-    // Render pass
-
-    std::vector<SubpassBuilder> subpasses;
-    {
-      SubpassBuilder& builder = subpasses.emplace_back();
-
-      GBufferResources::setupAttachments(builder);
-
-      builder.pipelineBuilder
-          .setCullMode(VK_CULL_MODE_NONE)
-
-          .addVertexShader(GProjectDirectory + "/Shaders/Cloth/Cloth.vert")
-          .addFragmentShader(
-              GProjectDirectory + "/Shaders/GBufferPassThrough.frag")
-
-          .layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
-          .addPushConstants<PushConstants>();
-    }
-
-    std::vector<Attachment> attachments = gBuffer.getAttachmentDescriptions();
-    m_renderPass = RenderPass(
-        app,
-        app.getSwapChainExtent(),
-        std::move(attachments),
-        std::move(subpasses));
-
-    m_frameBuffer = FrameBuffer(
-        app,
-        m_renderPass,
-        app.getSwapChainExtent(),
-        gBuffer.getAttachmentViewsA());
-  }
 
   // TODO: Compute passes..
 
@@ -167,7 +142,6 @@ void ClothSim::init(
 }
 
 void ClothSim::tryRecompileShaders(Application& app) {
-  m_renderPass.tryRecompile(app);
   for (ComputePipeline& computePass : m_solvePasses)
     computePass.tryRecompile(app);
 
@@ -734,24 +708,7 @@ void ClothSim::draw(
     m_uniforms.updateUniforms(uniforms, frame);
   }
 
-  PushConstants push{};
-  push.clothUniforms = m_uniforms.getCurrentHandle(frame).index;
-
-  // Draw
-  {
-    ActiveRenderPass pass =
-        m_renderPass.begin(app, commandBuffer, frame, m_frameBuffer);
-
-    pass.setGlobalDescriptorSets(gsl::span(&heapSet, 1));
-    pass.getDrawContext().bindDescriptorSets();
-    pass.getDrawContext().updatePushConstants(push, 0);
-
-    for (const ClothSection& section : m_clothSections) {
-      pass.getDrawContext().bindIndexBuffer(section.indices);
-      pass.getDrawContext().drawIndexed(section.indices.getIndexCount());
-    }
-  }
-
+  // TODO: These should also be registered directly into the gbuffer pass...
   m_aabb.debugDraw(
       app,
       commandBuffer,
@@ -761,6 +718,27 @@ void ClothSim::draw(
       globalUniformsHandle);
 
   m_collisions.draw(app, commandBuffer, frame, heapSet, globalUniformsHandle);
+}
+
+void ClothSim::drawGBuffer(
+    const DrawContext& context,
+    BufferHandle globalResourcesHandle,
+    UniformHandle globalUniformsHandle) {
+  const FrameContext& frame = context.getFrame();
+
+  PushConstants push{};
+  push.clothUniforms = m_uniforms.getCurrentHandle(frame).index;
+
+  // Draw
+  {
+    context.bindDescriptorSets();
+    context.updatePushConstants(push, 0);
+
+    for (const ClothSection& section : m_clothSections) {
+      context.bindIndexBuffer(section.indices);
+      context.drawIndexed(section.indices.getIndexCount());
+    }
+  }
 }
 
 void ClothSim::updateUI() {

@@ -73,6 +73,12 @@ private:
   GlobalUniformsResource m_globalUniforms;
   GlobalResources m_globalResources;
 
+  void _createGBufferPass(Application& app);
+  bool m_gBufferPhase = true;
+  RenderPass m_gBufferPass;
+  FrameBuffer m_gBufferPassFB_A;
+  FrameBuffer m_gBufferPassFB_B;
+
   void _createDeferredPass(Application& app);
   RenderPass m_deferredPass;
   SwapChainFrameBufferCollection m_swapChainFrameBuffers;
