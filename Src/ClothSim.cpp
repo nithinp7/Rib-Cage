@@ -139,7 +139,7 @@ void ClothSim::init(
       m_clothSections[0].indices.getIndexCount() / 3);
 
   // GBuffer subpasses
-  gBufferPassBuilder.registerSubpass(this);
+  gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
   gBufferPassBuilder.registerSubpass(m_aabb);
 
   m_collisions = CollisionsManager(app, gBufferPassBuilder);

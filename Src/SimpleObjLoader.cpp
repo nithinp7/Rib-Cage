@@ -178,7 +178,7 @@ void ObjTestScene::init(
     GlobalHeap& heap) {
   std::string path = GProjectDirectory + "/Data/ImportedModels/testExport.obj";
   loadObj(app, commandBuffer, path.c_str(), m_objects.emplace_back());
-  gBufferPassBuilder.registerSubpass(this);
+  gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
 }
 
 void ObjTestScene::registerGBufferSubpass(GraphicsPipelineBuilder& builder) const {

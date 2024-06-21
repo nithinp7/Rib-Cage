@@ -1,16 +1,28 @@
 ROADMAP
 
-This is going to remain a disparate collection of experiments and features until a coherent game / engine takes
+This is going to remain a loose collection of experiments and features until a coherent game / engine takes
 shape
 
 Short-term:
-- gbffer phase
-- SceneElement abstraction
+- x scene-to-gbffer phase
+- x SceneElement abstraction
 
-Areas to explore:
+gameplay prototype
+- rotor animations
+- basic flight controller for helicopter
+- simple foliage / wind
+
+blocking pipeline work:
+- hammer out workflow to export from blender --> Althea
+- uv mapping, PBR textures
+- ...animations!
+
+blocking systems work:
+- rigid body collision detection 
+- eventually rigid body physics solver
+- generic skinning framework
+
+Future areas to explore:
 - procedural animation
 - IK solver 
-// TODO: Fill out the longer-term goals here
-
-Once all of that is sorted out, can start on some basic IK solvers and procedural animation stuff
-Can also use the skeleton editor to specify various spring constraints / motors
+- skeleton / constraint editor
