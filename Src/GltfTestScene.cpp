@@ -41,12 +41,12 @@ void GltfTestScene::beginGBufferSubpass(
     UniformHandle globalUniformsHandle) {
 
   GltfPushConstants push{};
-  push.model = glm::mat4(1.0f);
   push.globalResourcesHandle = globalResourcesHandle.index;
   push.globalUniformsHandle = globalUniformsHandle.index;
 
   for (const Model& model : m_models) {
     for (const Primitive& primitive : model.getPrimitives()) {
+      push.model = primitive.getTransform();
       push.primConstantsHandle = primitive.getConstantBufferHandle().index;
       context.bindDescriptorSets();
       context.updatePushConstants(push, 0);
