@@ -9,11 +9,27 @@ void GltfTestScene::init(
     SingleTimeCommandBuffer& commandBuffer,
     SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
-  std::string path = GProjectDirectory + "/Data/ImportedModels/test.gltf";
-  // std::string path = GEngineDirectory + "/Content/Models/DamagedHelmet.glb";
-  m_models.emplace_back(app, commandBuffer, path);
-  m_models.back().registerToHeap(heap);
-  m_models.back().createConstantBuffers(app, commandBuffer, heap);
+  {
+    std::string path = GProjectDirectory + "/Data/ImportedModels/test.gltf";
+    Model& heli = m_models.emplace_back(app, commandBuffer, path);
+    heli.registerToHeap(heap);
+    heli.createConstantBuffers(app, commandBuffer, heap);
+
+    int32_t animationIdx = heli.getAnimationIndex("All Animations");
+    heli.startAnimation(animationIdx, true);
+  }
+
+  {
+    std::string path = GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
+    // std::string path = GProjectDirectory + "/Data/ImportedModels/interpolationTest.glb";
+    Model& test = m_models.emplace_back(app, commandBuffer, path);
+    test.registerToHeap(heap);
+    test.createConstantBuffers(app, commandBuffer, heap);
+
+    int32_t animationIdx = test.getAnimationIndex("Linear Rotation");
+    test.startAnimation(animationIdx, true);
+  }
+
   gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
 }
 
@@ -26,14 +42,18 @@ struct GltfPushConstants {
 };
 } // namespace
 
-void GltfTestScene::registerGBufferSubpass(GraphicsPipelineBuilder& builder) const {
+void GltfTestScene::registerGBufferSubpass(
+    GraphicsPipelineBuilder& builder) const {
   Primitive::buildPipeline(builder);
   builder.addVertexShader(GProjectDirectory + "/Shaders/Gltf/Gltf.vert");
   builder.addFragmentShader(GProjectDirectory + "/Shaders/Gltf/Gltf.frag");
   builder.layoutBuilder.addPushConstants<GltfPushConstants>();
 }
 
-void GltfTestScene::update(const FrameContext& frame) {}
+void GltfTestScene::update(const FrameContext& frame) {
+  for (Model& model : m_models)
+    model.updateAnimation(frame.deltaTime);
+}
 
 void GltfTestScene::beginGBufferSubpass(
     const DrawContext& context,
