@@ -1,5 +1,7 @@
 #include "GltfTestScene.h"
 
+#include <Althea/Gui.h>
+
 using namespace AltheaEngine;
 
 namespace RibCage {
@@ -20,8 +22,10 @@ void GltfTestScene::init(
   }
 
   {
-    std::string path = GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
-    // std::string path = GProjectDirectory + "/Data/ImportedModels/interpolationTest.glb";
+    std::string path =
+        GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
+    // std::string path = GProjectDirectory +
+    // "/Data/ImportedModels/interpolationTest.glb";
     Model& test = m_models.emplace_back(app, commandBuffer, path);
     test.registerToHeap(heap);
     test.createConstantBuffers(app, commandBuffer, heap);
@@ -77,5 +81,52 @@ void GltfTestScene::beginGBufferSubpass(
   }
 }
 
-void GltfTestScene::updateUI() {}
+void GltfTestScene::updateUI() {
+  // TODO: actually pull out model names from paths
+  static std::vector<std::string> s_modelNames;
+  static int s_modelIdx;
+  if (s_modelNames.size() != m_models.size()) {
+    s_modelNames.clear();
+    s_modelIdx = 0;
+    for (int i = 0; i < m_models.size(); ++i) {
+      char buf[128];
+      sprintf(buf, "Model %d", i);
+      s_modelNames.emplace_back(buf);
+    }
+  }
+
+  if (ImGui::CollapsingHeader("Gltf Animations")) {
+    ImGui::Text("Select Model:");
+    if (ImGui::BeginCombo("##selectmodel", s_modelNames[s_modelIdx].c_str())) {
+      for (int i = 0; i < m_models.size(); ++i) {
+        bool bSelected = s_modelIdx == i;
+        if (ImGui::Selectable(s_modelNames[i].c_str(), bSelected)) {
+          s_modelIdx = i;
+        }
+      }
+      ImGui::EndCombo();
+    }
+
+    static int s_animationIdx = 0;
+    ImGui::Text("Select Animation:");
+    Model& model = m_models[s_modelIdx];
+    int animCount = model.getAnimationCount();
+    if (animCount > 0) {
+      if (s_animationIdx >= animCount)
+        s_animationIdx = 0;
+      if (ImGui::BeginCombo("##selectanimation", model.getAnimationName(s_animationIdx).c_str())) {
+        for (int i = 0; i < animCount; ++i) {
+          bool bSelected = s_animationIdx == i;
+          if (ImGui::Selectable(model.getAnimationName(i).c_str(), bSelected)) {
+            s_animationIdx = i;
+            model.stopAllAnimations();
+            model.startAnimation(s_animationIdx, true);
+          }
+        }
+
+        ImGui::EndCombo();
+      }
+    }
+  }
+}
 } // namespace RibCage
