@@ -3,9 +3,21 @@ ROADMAP
 This is going to remain a loose collection of experiments and features until a coherent game / engine takes
 shape
 
-Short-term:
-- x scene-to-gbffer phase
-- x SceneElement abstraction
+Animation Systems:
+- Decouple animation player from Model
+- Allow multiple simultaneous animations in single model 
+-   requires animation blending logic
+- animation blends: constant, ramps, transitions...
+- Can "glue" blended animations and create "CompoundAnimations"
+- From there "AnimationStateMachine" 
+-   abstraction layer to expression async logic of CompoundAnimations, transitions, cycles, etc
+
+Skeleton / Rigging:
+- What can we do with the rudimentary "SkeletonEditor" prototype...
+- Maybe can take core bones / anims from imported animations...
+-     and can author interpolated deformation bones, which can be subject to
+      physics or otherwise procedural deformations...
+
 
 gameplay prototype
 - rotor animations

@@ -16,9 +16,6 @@ void GltfTestScene::init(
     Model& heli = m_models.emplace_back(app, commandBuffer, path);
     heli.registerToHeap(heap);
     heli.createConstantBuffers(app, commandBuffer, heap);
-
-    int32_t animationIdx = heli.getAnimationIndex("All Animations");
-    heli.startAnimation(animationIdx, true);
   }
 
   {
@@ -29,9 +26,6 @@ void GltfTestScene::init(
     Model& test = m_models.emplace_back(app, commandBuffer, path);
     test.registerToHeap(heap);
     test.createConstantBuffers(app, commandBuffer, heap);
-
-    int32_t animationIdx = test.getAnimationIndex("Linear Rotation");
-    test.startAnimation(animationIdx, true);
   }
 
   gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
@@ -96,6 +90,8 @@ void GltfTestScene::updateUI() {
   }
 
   if (ImGui::CollapsingHeader("Gltf Animations")) {
+    ImGui::Indent();
+
     ImGui::Text("Select Model:");
     if (ImGui::BeginCombo("##selectmodel", s_modelNames[s_modelIdx].c_str())) {
       for (int i = 0; i < m_models.size(); ++i) {
@@ -108,25 +104,39 @@ void GltfTestScene::updateUI() {
     }
 
     static int s_animationIdx = 0;
-    ImGui::Text("Select Animation:");
     Model& model = m_models[s_modelIdx];
     int animCount = model.getAnimationCount();
+
+    ImGui::Text("Select Animation:");
     if (animCount > 0) {
       if (s_animationIdx >= animCount)
         s_animationIdx = 0;
-      if (ImGui::BeginCombo("##selectanimation", model.getAnimationName(s_animationIdx).c_str())) {
+      if (ImGui::BeginCombo(
+              "##selectanimation",
+              model.getAnimationName(s_animationIdx).c_str())) {
         for (int i = 0; i < animCount; ++i) {
           bool bSelected = s_animationIdx == i;
           if (ImGui::Selectable(model.getAnimationName(i).c_str(), bSelected)) {
             s_animationIdx = i;
-            model.stopAllAnimations();
-            model.startAnimation(s_animationIdx, true);
           }
         }
 
         ImGui::EndCombo();
       }
     }
+
+    if (ImGui::Button("Play")) {
+      if (s_animationIdx >= 0 && s_animationIdx < animCount) {
+        model.startAnimation(s_animationIdx, true);
+      }
+    }
+
+    if (ImGui::Button("Stop All")) {
+      for (Model& m : m_models)
+        m.stopAllAnimations();
+    }
+
+    ImGui::Unindent();
   }
 }
 } // namespace RibCage

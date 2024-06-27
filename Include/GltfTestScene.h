@@ -41,7 +41,5 @@ public:
 
 private:
   std::vector<Model> m_models;
-  StructuredBuffer<PrimitiveConstants> m_constantBuffer;
-  
 };
 } // namespace 
