@@ -2,6 +2,7 @@
 
 #include "SceneElement.h"
 
+#include <Althea/Animation.h>
 #include <Althea/ImageResource.h>
 #include <Althea/IndexBuffer.h>
 #include <Althea/SingleTimeCommandBuffer.h>
@@ -41,5 +42,6 @@ public:
 
 private:
   std::vector<Model> m_models;
+  AnimationSystem m_animationSystem;
 };
 } // namespace 

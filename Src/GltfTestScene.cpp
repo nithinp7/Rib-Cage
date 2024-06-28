@@ -49,8 +49,7 @@ void GltfTestScene::registerGBufferSubpass(
 }
 
 void GltfTestScene::update(const FrameContext& frame) {
-  for (Model& model : m_models)
-    model.updateAnimation(frame.deltaTime);
+  m_animationSystem.update(frame.deltaTime);
 }
 
 void GltfTestScene::beginGBufferSubpass(
@@ -104,6 +103,7 @@ void GltfTestScene::updateUI() {
     }
 
     static int s_animationIdx = 0;
+    static bool s_loop = false;
     Model& model = m_models[s_modelIdx];
     int animCount = model.getAnimationCount();
 
@@ -127,13 +127,14 @@ void GltfTestScene::updateUI() {
 
     if (ImGui::Button("Play")) {
       if (s_animationIdx >= 0 && s_animationIdx < animCount) {
-        model.startAnimation(s_animationIdx, true);
+        m_animationSystem.startAnimation(&model, s_animationIdx, s_loop);
       }
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Loop", &s_loop);
 
     if (ImGui::Button("Stop All")) {
-      for (Model& m : m_models)
-        m.stopAllAnimations();
+      m_animationSystem.stopAllAnimations();
     }
 
     ImGui::Unindent();

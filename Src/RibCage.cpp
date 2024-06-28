@@ -169,11 +169,6 @@ void RibCage::tick(Application& app, const FrameContext& frame) {
     Gui::finishRecordingImgui();
   }
 
-  // m_pCameraController->tick(frame.deltaTime);
-  // const Camera& camera = m_pCameraController->getCamera();
-
-  // const glm::mat4& projection = camera.getProjection();
-
   const InputManager::MousePos& mPos =
       app.getInputManager().getCurrentMousePos();
 
