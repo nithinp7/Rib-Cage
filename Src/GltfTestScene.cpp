@@ -1,6 +1,7 @@
 #include "GltfTestScene.h"
 
 #include <Althea/Gui.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 using namespace AltheaEngine;
 
@@ -12,21 +13,23 @@ void GltfTestScene::init(
     SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
   {
-    std::string path = GProjectDirectory + "/Data/ImportedModels/test.gltf";
+    std::string path = GProjectDirectory + "/Data/ImportedModels/heli.glb";
+    // std::string path = GProjectDirectory + "/Data/ImportedModels/testTree.glb";
     Model& heli = m_models.emplace_back(app, commandBuffer, path);
+    heli.setModelTransform(glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)));
     heli.registerToHeap(heap);
     heli.createConstantBuffers(app, commandBuffer, heap);
   }
 
-  {
-    std::string path =
-        GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
-    // std::string path = GProjectDirectory +
-    // "/Data/ImportedModels/interpolationTest.glb";
-    Model& test = m_models.emplace_back(app, commandBuffer, path);
-    test.registerToHeap(heap);
-    test.createConstantBuffers(app, commandBuffer, heap);
-  }
+  // {
+  //   std::string path =
+  //       GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
+  //   // std::string path = GProjectDirectory +
+  //   // "/Data/ImportedModels/interpolationTest.glb";
+  //   Model& test = m_models.emplace_back(app, commandBuffer, path);
+  //   test.registerToHeap(heap);
+  //   test.createConstantBuffers(app, commandBuffer, heap);
+  // }
 
   gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
 }

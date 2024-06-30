@@ -4,13 +4,20 @@ This is going to remain a loose collection of experiments and features until a c
 shape
 
 Animation Systems:
-- Decouple animation player from Model
-- Allow multiple simultaneous animations in single model 
--   requires animation blending logic
-- animation blends: constant, ramps, transitions...
-- Can "glue" blended animations and create "CompoundAnimations"
-- From there "AnimationStateMachine" 
+- [x] Decouple animation player from Model
+- [x] Allow multiple simultaneous animations in single model 
+- [ ] requires animation blending logic
+- [ ] animation blends: constant, ramps, transitions...
+- [ ] Can "glue" blended animations and create "CompoundAnimations"
+- [ ] From there "AnimationStateMachine" 
 -   abstraction layer to expression async logic of CompoundAnimations, transitions, cycles, etc
+
+Skinning:
+- [ ] Morph target support, doesn't sound too complicated
+      have multiple meshes and just linearly interpolate based on weights 
+      Note: Morph targets can also linearly animate joints, uvs, skinning weights etc
+- [ ] Dynamic morph targets?
+- [ ] Dynamic morph target weights? (motion matching, deformation matching?)
 
 Skeleton / Rigging:
 - What can we do with the rudimentary "SkeletonEditor" prototype...
