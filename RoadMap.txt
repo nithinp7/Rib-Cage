@@ -3,6 +3,11 @@ ROADMAP
 This is going to remain a loose collection of experiments and features until a coherent game / engine takes
 shape
 
+Rendering:
+- [ ] Fix acceleration structures for static primitives
+- [ ] Impl TLAS refitting for dynamic primitives 
+- [ ] Impl BLAS refitting for skinned primitives 
+
 Animation Systems:
 - [x] Decouple animation player from Model
 - [x] Allow multiple simultaneous animations in single model 
@@ -12,7 +17,11 @@ Animation Systems:
 - [ ] From there "AnimationStateMachine" 
 -   abstraction layer to expression async logic of CompoundAnimations, transitions, cycles, etc
 
-Skinning:
+Skeletal Anim / Skinning:
+- [x] Incorporate joints / weights attributes in Primitive vertex buffer setup
+- [...] WIP Setup skeleton / joint heirarchy, inverse bind matrices, etc...
+
+Blendshapes / Morph Targets
 - [ ] Morph target support, doesn't sound too complicated
       have multiple meshes and just linearly interpolate based on weights 
       Note: Morph targets can also linearly animate joints, uvs, skinning weights etc

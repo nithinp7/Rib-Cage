@@ -7,6 +7,10 @@ layout(location=1) in mat3 tbn;
 // layout(location = 2) in vec3 bitangent;
 // layout(location = 3) in vec3 normal;
 layout(location=4) in vec2 uvs[4];
+// ... also takes location 5, 6, 7
+layout(location=8) in vec4 weights;
+layout(location=9) in uvec4 joints;
+// layout(location=9) in uvec2 packedJoints;
 
 layout(location=0) out vec2 baseColorUV;
 layout(location=1) out vec2 normalMapUV;
@@ -23,7 +27,7 @@ layout(location=9) out vec3 direction;
 #include <PrimitiveResources.glsl>
 
 layout(push_constant) uniform PushConstants {
-  mat4 model;
+  uint matrixBufferHandle;
   uint primConstantsBuffer;
   uint globalResourcesHandle;
   uint globalUniformsHandle;
@@ -37,7 +41,19 @@ void main() {
       RESOURCE(primitiveConstants, pushConstants.primConstantsBuffer)
         .primitiveConstantsArr[0];
 
-  vec4 worldPos4 = pushConstants.model * vec4(position, 1.0);
+  mat4 model = mat4(0.0);
+  if (constants.isSkinned == 0) {
+    model = getMatrix(pushConstants.matrixBufferHandle, constants.nodeIdx);
+  } else {
+    for (int i = 0; i < 4; ++i) {
+      if (weights[i] > 0.0) {
+        uint nodeIdx = getNodeIdxFromJointIdx(constants.jointMapHandle, joints[i]);
+        model += weights[i] * getMatrix(pushConstants.matrixBufferHandle, nodeIdx);
+      }
+    }
+  }
+
+  vec4 worldPos4 = model * vec4(position, 1.0);
   worldPosition = worldPos4.xyz;
 
   gl_Position = globals.projection * globals.view * worldPos4;
@@ -51,5 +67,5 @@ void main() {
   occlusionUV = uvs[constants.occlusionTextureCoordinateIndex];
   emissiveUV = uvs[constants.emissiveTextureCoordinateIndex];
 
-  vertTbn = mat3(pushConstants.model) * tbn;
+  vertTbn = mat3(model) * tbn;
 }

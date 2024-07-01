@@ -12,31 +12,38 @@ void GltfTestScene::init(
     SingleTimeCommandBuffer& commandBuffer,
     SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
+
+  
+  // {
+  //   std::string path = GProjectDirectory + "/Data/ImportedModels/heli.glb";
+  //   Model& heli = m_models.emplace_back(app, commandBuffer, heap, path);
+  //   heli.setModelTransform(glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)));
+  // }
+
   {
-    std::string path = GProjectDirectory + "/Data/ImportedModels/heli.glb";
-    // std::string path = GProjectDirectory + "/Data/ImportedModels/testTree.glb";
-    Model& heli = m_models.emplace_back(app, commandBuffer, path);
-    heli.setModelTransform(glm::scale(glm::mat4(1.0f), glm::vec3(5.0f)));
-    heli.registerToHeap(heap);
-    heli.createConstantBuffers(app, commandBuffer, heap);
+    std::string path = GProjectDirectory + "/Data/ImportedModels/testTree.glb";
+    Model& heli = m_models.emplace_back(app, commandBuffer, heap, path);
+    // heli.setModelTransform(glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)));
   }
 
-  // {
-  //   std::string path =
-  //       GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
-  //   // std::string path = GProjectDirectory +
-  //   // "/Data/ImportedModels/interpolationTest.glb";
-  //   Model& test = m_models.emplace_back(app, commandBuffer, path);
-  //   test.registerToHeap(heap);
-  //   test.createConstantBuffers(app, commandBuffer, heap);
-  // }
+  /*{
+    std::string path =
+        GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
+    Model& test = m_models.emplace_back(app, commandBuffer, heap, path);
+  }
+
+  {
+    std::string path =
+        GEngineDirectory + "/Content/Models/DamagedHelmet.glb";
+    Model& test = m_models.emplace_back(app, commandBuffer, heap, path);
+  }*/
 
   gBufferPassBuilder.registerSubpass(IntrusivePtr(this));
 }
 
 namespace {
 struct GltfPushConstants {
-  glm::mat4 model;
+  uint32_t matrixBufferHandle;
   uint32_t primConstantsHandle;
   uint32_t globalResourcesHandle;
   uint32_t globalUniformsHandle;
@@ -53,6 +60,8 @@ void GltfTestScene::registerGBufferSubpass(
 
 void GltfTestScene::update(const FrameContext& frame) {
   m_animationSystem.update(frame.deltaTime);
+  for (Model& model : m_models)
+    model.uploadTransforms(frame);
 }
 
 void GltfTestScene::beginGBufferSubpass(
@@ -65,9 +74,11 @@ void GltfTestScene::beginGBufferSubpass(
   push.globalUniformsHandle = globalUniformsHandle.index;
 
   for (const Model& model : m_models) {
+    push.matrixBufferHandle =
+        model.getTransformsHandle(context.getFrame()).index;
     for (const Primitive& primitive : model.getPrimitives()) {
-      push.model = primitive.getTransform();
       push.primConstantsHandle = primitive.getConstantBufferHandle().index;
+      context.setFrontFaceDynamic(primitive.getFrontFace());
       context.bindDescriptorSets();
       context.updatePushConstants(push, 0);
       context.bindVertexBuffer(primitive.getVertexBuffer());

@@ -22,7 +22,7 @@ layout(location=2) out vec4 GBuffer_MetallicRoughnessOcclusion;
 #include <PrimitiveResources.glsl>
 
 layout(push_constant) uniform PushConstants {
-  mat4 model;
+  uint matrixBufferHandle;
   uint primConstantsBuffer;
   uint globalResourcesHandle;
   uint globalUniformsHandle;
