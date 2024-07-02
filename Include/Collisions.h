@@ -6,6 +6,7 @@
 #include <Althea/Application.h>
 #include <Althea/BindlessHandle.h>
 #include <Althea/Containers/StridedView.h>
+#include <Althea/Debug/DebugDraw.h>
 #include <Althea/FrameContext.h>
 #include <Althea/Framebuffer.h>
 #include <Althea/RenderPass.h>
@@ -97,6 +98,6 @@ public:
 private:
   Collisions m_collisions;
 
-  IntrusivePtr<DebugVisualizationScene> m_dbgViz;
+  IntrusivePtr<DebugDrawLines> m_dbgViz;
 };
 } // namespace RibCage

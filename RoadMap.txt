@@ -19,7 +19,7 @@ Animation Systems:
 
 Skeletal Anim / Skinning:
 - [x] Incorporate joints / weights attributes in Primitive vertex buffer setup
-- [...] WIP Setup skeleton / joint heirarchy, inverse bind matrices, etc...
+- [x] Setup skeleton / joint heirarchy, inverse bind matrices, etc...
 
 Blendshapes / Morph Targets
 - [ ] Morph target support, doesn't sound too complicated

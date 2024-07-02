@@ -619,7 +619,7 @@ void Collisions::update(
 CollisionsManager::CollisionsManager(
     Application& app,
     SceneToGBufferPassBuilder& gBufferPassBuilder)
-    : m_dbgViz(makeIntrusive<DebugVisualizationScene>(app)) {
+    : m_dbgViz(makeIntrusive<DebugDrawLines>(app)) {
   gBufferPassBuilder.registerSubpass(m_dbgViz);
 }
 

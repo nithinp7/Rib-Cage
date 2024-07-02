@@ -246,8 +246,8 @@ void RibCage::_createGlobalResources(
       m_globalHeap,
       m_globalResources.getGBuffer());
 
-  m_sceneElements.emplace_back(makeIntrusive<GltfTestScene>());
-  // m_sceneElements.emplace_back(makeIntrusive<ClothSim>());
+  // m_sceneElements.emplace_back(makeIntrusive<GltfTestScene>());
+  m_sceneElements.emplace_back(makeIntrusive<ClothSim>());
   // m_sceneElements.emplace_back(makeIntrusive<ObjTestScene>());
 
   SceneToGBufferPassBuilder gBufferPassBuilder{};

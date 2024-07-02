@@ -164,7 +164,7 @@ void main() {
   vec3 irradianceColor = sampleIrrMap(normal);
 
 #ifdef ENABLE_SSAO
-  float occlusion = metallicRoughnessDebug.z;//computeSSAO(uv, position.xyz + normal * 0.001, normal);
+  float occlusion = 1.0;//computeSSAO(uv, position.xyz + normal * 0.001, normal);
 #endif
 
   vec3 material = 

@@ -26,13 +26,18 @@ void GltfTestScene::init(
     // heli.setModelTransform(glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)));
   }
 
-  /*{
+  {
     std::string path =
         GProjectDirectory + "/Data/ImportedModels/interpolationTest.gltf";
     Model& test = m_models.emplace_back(app, commandBuffer, heap, path);
   }
-
+  
   {
+    std::string path =
+        GProjectDirectory + "/Data/ImportedModels/RecursiveSkeletons.glb";
+    Model& test = m_models.emplace_back(app, commandBuffer, heap, path);
+  }
+  /*{
     std::string path =
         GEngineDirectory + "/Content/Models/DamagedHelmet.glb";
     Model& test = m_models.emplace_back(app, commandBuffer, heap, path);

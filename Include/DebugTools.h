@@ -39,40 +39,6 @@ struct SceneQueryResult {
   QueryHitType hitType;
 };
 
-// Debug visualization scene
-class DebugVisualizationScene : public IGBufferSubpass {
-public:
-  DebugVisualizationScene() = default;
-  DebugVisualizationScene(Application& app);
-
-  // IGBufferSubpass impl
-  void registerGBufferSubpass(GraphicsPipelineBuilder& builder) const override;
-  void beginGBufferSubpass(
-      const DrawContext& context,
-      BufferHandle globalResourcesHandle,
-      UniformHandle globalUniformsHandle) override;
-
-  void reset() { m_lineCount = 0; }
-  bool addLine(const glm::vec3& a, const glm::vec3& b, uint32_t color) {
-    if (m_lineCount < MAX_DBG_LINES) {
-      m_lines.setVertex({a, color}, 2 * m_lineCount);
-      m_lines.setVertex({b, color}, 2 * m_lineCount + 1);
-      ++m_lineCount;
-
-      return true;
-    }
-    return false;
-  }
-
-private:
-  struct DebugVert {
-    alignas(16) glm::vec3 position;
-    alignas(4) uint32_t color;
-  };
-  DynamicVertexBuffer<DebugVert> m_lines;
-  uint32_t m_lineCount = 0;
-};
-
 // Debug scene elements that are selectable
 class SelectableScene {
 public:

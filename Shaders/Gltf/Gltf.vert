@@ -42,16 +42,16 @@ void main() {
         .primitiveConstantsArr[0];
 
   mat4 model = mat4(0.0);
-  if (constants.isSkinned == 0) {
-    model = getMatrix(pushConstants.matrixBufferHandle, constants.nodeIdx);
-  } else {
+  if (constants.isSkinned > 0) {
     for (int i = 0; i < 4; ++i) {
       if (weights[i] > 0.0) {
         uint nodeIdx = getNodeIdxFromJointIdx(constants.jointMapHandle, joints[i]);
         model += weights[i] * getMatrix(pushConstants.matrixBufferHandle, nodeIdx);
       }
     }
-  }
+  } else {
+    model = getMatrix(pushConstants.matrixBufferHandle, constants.nodeIdx);
+  } 
 
   vec4 worldPos4 = model * vec4(position, 1.0);
   worldPosition = worldPos4.xyz;
