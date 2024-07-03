@@ -1,6 +1,7 @@
 #include "RibCage.h"
 
 #include "GltfTestScene.h"
+#include "PhysicsTestScene.h"
 
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
@@ -246,8 +247,9 @@ void RibCage::_createGlobalResources(
       m_globalHeap,
       m_globalResources.getGBuffer());
 
+  m_sceneElements.emplace_back(makeIntrusive<PhysicsTestScene>());
   // m_sceneElements.emplace_back(makeIntrusive<GltfTestScene>());
-  m_sceneElements.emplace_back(makeIntrusive<ClothSim>());
+  // m_sceneElements.emplace_back(makeIntrusive<ClothSim>());
   // m_sceneElements.emplace_back(makeIntrusive<ObjTestScene>());
 
   SceneToGBufferPassBuilder gBufferPassBuilder{};
