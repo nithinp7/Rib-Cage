@@ -8,11 +8,6 @@ using namespace AltheaEngine::AltheaPhysics;
 
 namespace RibCage {
 
-static uint32_t s_testCapsuleIdx = 0;
-static glm::vec3 s_testCapsuleA = glm::vec3(0.0f);
-static glm::vec3 s_testCapsuleB = glm::vec3(5.0f);
-static float s_testCapsuleRadius = 2.0f;
-
 void PhysicsTestScene::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
@@ -23,11 +18,6 @@ void PhysicsTestScene::init(
   glm::vec3 a(0.0f);
   glm::vec3 b(5.0f);
   float radius = 2.0f;
-
-  s_testCapsuleIdx = m_physicsSystem.registerCapsuleCollider(
-      s_testCapsuleA,
-      s_testCapsuleB,
-      s_testCapsuleRadius);
 }
 
 void PhysicsTestScene::update(const FrameContext& frame) {
@@ -38,21 +28,24 @@ void PhysicsTestScene::updateUI() {
   if (ImGui::CollapsingHeader("Test Physics System")) {
     ImGui::Indent();
 
-    ImGui::Text("Capsule A");
-    bool bChanged = ImGui::InputFloat3("##capsulea", &s_testCapsuleA[0]);
+    if (ImGui::Button("Create Capsule")) {
+      m_physicsSystem.registerCapsuleCollider(glm::vec3(0.0f), glm::vec3(5.0f), 2.0f);
+    }
 
-    ImGui::Text("Capsule B");
-    bChanged |= ImGui::InputFloat3("##capsuleb", &s_testCapsuleB[0]);
+    for (uint32_t i = 0; i < m_physicsSystem.getCapsuleCount(); ++i) {
+      Capsule& c = const_cast<Capsule&>(m_physicsSystem.getCapsule(i));
+      ImGui::Separator();
 
-    ImGui::Text("Capsule Radius");
-    bChanged |= ImGui::InputFloat("##capsuleradius", &s_testCapsuleRadius);
+      ImGui::Text("Capsule %d:", i);
 
-    if (bChanged)
-      m_physicsSystem.updateCapsule(
-          s_testCapsuleIdx,
-          s_testCapsuleA,
-          s_testCapsuleB,
-          s_testCapsuleRadius);
+      char buf[128];
+      sprintf(buf, "##capsulea_%d", i);
+      ImGui::DragFloat3(buf, &c.a[0]);
+      sprintf(buf, "##capsuleb_%d", i);
+      ImGui::DragFloat3(buf, &c.b[0]);
+      sprintf(buf, "##capsuler_%d", i);
+      ImGui::DragFloat(buf, &c.radius);
+    }
 
     ImGui::Unindent();
   }

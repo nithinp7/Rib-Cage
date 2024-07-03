@@ -3,6 +3,15 @@ ROADMAP
 This is going to remain a loose collection of experiments and features until a coherent game / engine takes
 shape
 
+Physics System:
+Collision detection
+- [ ] Rigid capsule/box/sphere/floor colliders
+- [ ] K/D tree acceleration structure
+- [ ] Ray queries
+Response
+- [ ] Rigid body position/velocity solver
+- [ ] 
+- [ ] Contact caching
 Rendering:
 - [ ] Fix acceleration structures for static primitives
 - [ ] Impl TLAS refitting for dynamic primitives 

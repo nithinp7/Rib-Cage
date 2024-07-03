@@ -185,6 +185,6 @@ void main() {
 
   outColor = vec4(material, 1.0);
 
-  // if (metallicRoughnessDebug.z > 0.0)
-  //   outColor.rgb = mix(outColor.rgb, baseColor.rgb, metallicRoughnessDebug.z * metallicRoughnessDebug.z);
+  if (metallicRoughnessDebug.z > 0.0)
+    outColor.rgb = mix(outColor.rgb, baseColor.rgb, metallicRoughnessDebug.z * metallicRoughnessDebug.z);
 }

@@ -55,8 +55,7 @@ void main() {
   float ambientOcclusion = 
       TEXTURE_SAMPLE(textureHeap, constants.occlusionTextureHandle, occlusionUV).r * constants.occlusionStrength;
 
-  GBuffer_MetallicRoughnessOcclusion = vec4(metallicRoughness, ambientOcclusion, GBuffer_Albedo.a);
-
+  GBuffer_MetallicRoughnessOcclusion = vec4(metallicRoughness, 0.0, GBuffer_Albedo.a);
 
   // vec4 emissive = TEXTURE_SAMPLE(textureHeap, constants.emissiveTextureHandle, emissiveUV);
   // GBuffer_Albedo.rgb = emissive.rgb;
