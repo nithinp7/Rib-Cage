@@ -4,11 +4,23 @@ This is going to remain a loose collection of experiments and features until a c
 shape
 
 Physics System:
+Ribid-body system design...
+- Capsule collider registration --> collider handle
+  - Later use handle to update collider transform
+  - Want "bindColliderToRigidBody" --> interprets collider transform in RB local-space?
+  - Where should the bind-pose be retained? struct ColliderBindng{ColliderHandle, mat4}
+  - Once a collider is bound to a RB, the rigid body system is solely responsible for
+  updating the collider transforms. 
+  - Updates happen during rigid body updates 
+  
+   
 Collision detection
-- [ ] Rigid capsule/box/sphere/floor colliders
+- [x] Rigid capsule collider
+- [ ] box/sphere/floor colliders
 - [ ] K/D tree acceleration structure
 - [ ] Ray queries
 Response
+- [ ] Simple rigid body kinematics / floor collision...
 - [ ] Rigid body position/velocity solver
 - [ ] 
 - [ ] Contact caching
