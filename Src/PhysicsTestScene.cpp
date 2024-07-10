@@ -8,6 +8,9 @@ using namespace AltheaEngine::AltheaPhysics;
 
 namespace RibCage {
 
+static bool s_paused = false;
+static int32_t s_stepFrameCounter = 0;
+
 void PhysicsTestScene::init(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer,
@@ -21,8 +24,11 @@ void PhysicsTestScene::init(
 }
 
 void PhysicsTestScene::update(const FrameContext& frame) {
-  float fixedDt = 1.0f / 30.0f;
-  m_physicsSystem.tick(fixedDt);
+  float fixedDt = 1.0f / 60.0f;
+  if (!s_paused || s_stepFrameCounter > 0)
+    m_physicsSystem.tick(fixedDt);
+  if (s_stepFrameCounter > 0)
+    --s_stepFrameCounter;
 }
 
 void PhysicsTestScene::updateUI() {
@@ -32,16 +38,80 @@ void PhysicsTestScene::updateUI() {
   if (ImGui::CollapsingHeader("Test Physics System")) {
     ImGui::Indent();
 
-    ImGui::Text("Gravity:");
-    ImGui::DragFloat("##gravity", &m_physicsSystem.getSettings().gravity);
-    ImGui::Text("Restitution:");
-    ImGui::DragFloat(
-        "##restitution",
-        &m_physicsSystem.getSettings().restitution);
-    ImGui::Text("Floor Height:");
-    ImGui::DragFloat(
-        "##floorheight",
-        &m_physicsSystem.getSettings().floorHeight);
+    ImGui::Text("Pause:");
+    ImGui::SameLine();
+    ImGui::Checkbox("##pause", &s_paused);
+
+    ImGui::Text("Step:");
+    ImGui::SameLine();
+    if (ImGui::Button(">"))
+      s_stepFrameCounter = 1;
+    ImGui::SameLine();
+    if (ImGui::Button(">>"))
+      s_stepFrameCounter = 8;
+    ImGui::SameLine();
+    if (ImGui::Button(">>>"))
+      s_stepFrameCounter = 16;
+
+    static bool s_settingsVisible = false;
+    if (ImGui::CollapsingHeader("Physics World Settings", s_settingsVisible)) {
+      ImGui::Text("Iterations:");
+      ImGui::DragInt(
+          "##iterations",
+          &m_physicsSystem.getSettings().SI_iters,
+          1.0F,
+          1,
+          40);
+      ImGui::Text("Gravity:");
+      ImGui::DragFloat(
+          "##gravity",
+          &m_physicsSystem.getSettings().gravity,
+          1.0f,
+          -20.0f,
+          20.0f);
+      ImGui::Text("Friction:");
+      ImGui::DragFloat(
+          "##friction",
+          &m_physicsSystem.getSettings().frictionCoeff,
+          1.0f,
+          0.0f,
+          1.0f);
+      ImGui::Text("Linear Damping:");
+      ImGui::DragFloat(
+          "##lindamping",
+          &m_physicsSystem.getSettings().linearDamping,
+          0.01f,
+          0.0f,
+          1.0f);
+      ImGui::Text("Angular Damping:");
+      ImGui::DragFloat(
+          "##angdamping",
+          &m_physicsSystem.getSettings().angularDamping,
+          0.01f,
+          0.0f,
+          1.0f);
+      ImGui::Text("Bias:");
+      ImGui::DragFloat(
+          "##sibias",
+          &m_physicsSystem.getSettings().SI_bias,
+          1.0f,
+          0.0f,
+          1.0f);
+      ImGui::Text("Restitution:");
+      ImGui::DragFloat(
+          "##restitution",
+          &m_physicsSystem.getSettings().restitution,
+          1.0f,
+          0.0f,
+          1.0f);
+      ImGui::Text("Floor Height:");
+      ImGui::DragFloat(
+          "##floorheight",
+          &m_physicsSystem.getSettings().floorHeight,
+          1.0f,
+          -20.0f,
+          20.0f);
+    }
     ImGui::Separator();
 
     if (ImGui::Button("Create Capsule")) {
@@ -49,7 +119,10 @@ void PhysicsTestScene::updateUI() {
       float phi = glm::pi<float>() * std::rand() / RAND_MAX;
       m_physicsSystem.registerCapsuleCollider(
           glm::vec3(0.0f),
-          5.0f * glm::vec3(cos(theta) * cos(phi), sin(theta), cos(theta) * sin(phi)),
+          5.0f * glm::vec3(
+                     cos(theta) * cos(phi),
+                     sin(theta),
+                     cos(theta) * sin(phi)),
           2.0f);
       ++unboundCapsules;
     }
@@ -101,21 +174,30 @@ void PhysicsTestScene::updateUI() {
 
       ImGui::Text("Capsule %d:", i);
 
-      sprintf(buf, "##capsuletranslate_%d", i);
       glm::vec3 orig = 0.5f * (c.a + c.b);
       glm::vec3 center = orig;
+      sprintf(buf, "##capsuletranslate_%d", i);
       if (ImGui::DragFloat3(buf, &center[0])) {
         glm::vec3 diff = center - orig;
         c.a += diff;
         c.b += diff;
       }
 
-      // sprintf(buf, "##capsulea_%d", i);
-      // ImGui::DragFloat3(buf, &c.a[0]);
-      // sprintf(buf, "##capsuleb_%d", i);
-      // ImGui::DragFloat3(buf, &c.b[0]);
-      // sprintf(buf, "##capsuler_%d", i);
-      // ImGui::DragFloat(buf, &c.radius);
+      glm::vec3 r = c.b - c.a;
+      float anglesScale[3];
+      anglesScale[0] = glm::degrees(atan2(r.y, sqrt(r.x * r.x + r.z * r.z)));
+      anglesScale[1] = glm::degrees(atan2(r.z, r.x));
+      anglesScale[2] = glm::length(r);
+      sprintf(buf, "##capsulerot_%d", i);
+      if (ImGui::DragFloat3(buf, anglesScale)) {
+        float sTheta = sin(glm::radians(anglesScale[0]));
+        float cTheta = cos(glm::radians(anglesScale[0]));
+        float sPhi = sin(glm::radians(anglesScale[1]));
+        float cPhi = cos(glm::radians(anglesScale[1]));
+
+        c.b = c.a +
+              anglesScale[2] * glm::vec3(cTheta * cPhi, sTheta, cTheta * sPhi);
+      }
     }
 
     ImGui::Unindent();
