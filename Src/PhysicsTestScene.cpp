@@ -16,7 +16,15 @@ void PhysicsTestScene::init(
     SingleTimeCommandBuffer& commandBuffer,
     SceneToGBufferPassBuilder& gBufferPassBuilder,
     GlobalHeap& heap) {
+
+  float floorHeight = -8.0f;
+
   m_physicsSystem = PhysicsSystem(app, commandBuffer, gBufferPassBuilder, heap);
+  m_physicsSystem.getSettings().floorHeight = floorHeight;
+
+  m_floor = makeIntrusive<Floor>();
+  gBufferPassBuilder.registerSubpass(m_floor);
+  m_floor->m_floorHeight = floorHeight;
 
   glm::vec3 a(0.0f);
   glm::vec3 b(5.0f);
@@ -105,12 +113,14 @@ void PhysicsTestScene::updateUI() {
           0.0f,
           1.0f);
       ImGui::Text("Floor Height:");
-      ImGui::DragFloat(
-          "##floorheight",
-          &m_physicsSystem.getSettings().floorHeight,
-          1.0f,
-          -20.0f,
-          20.0f);
+      if (ImGui::DragFloat(
+              "##floorheight",
+              &m_physicsSystem.getSettings().floorHeight,
+              1.0f,
+              -20.0f,
+              20.0f)) {
+        m_floor->m_floorHeight = m_physicsSystem.getSettings().floorHeight;
+      }
     }
     ImGui::Separator();
 

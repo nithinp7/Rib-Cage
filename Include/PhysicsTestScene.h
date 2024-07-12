@@ -15,6 +15,7 @@
 #include <Althea/GlobalHeap.h>
 #include <Althea/Model.h>
 #include <Althea/Physics/PhysicsSystem.h>
+#include <Althea/Scene/Floor.h>
 #include <glm/glm.hpp>
 
 using namespace AltheaEngine;
@@ -37,5 +38,6 @@ public:
 
 private:
   PhysicsSystem m_physicsSystem;
+  IntrusivePtr<Floor> m_floor;
 };
 } // namespace 

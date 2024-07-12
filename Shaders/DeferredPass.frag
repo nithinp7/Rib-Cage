@@ -159,7 +159,9 @@ void main() {
   vec3 normal = normalize(texture(gBufferNormal, uv).xyz);
 
   vec3 reflectedDirection = reflect(normalize(direction), normal);
-  vec4 reflectedColor = vec4(sampleEnvMap(reflectedDirection, metallicRoughnessDebug.y), 1.0);
+  vec4 ssrSample = sampleReflection(metallicRoughnessDebug.y);
+  vec3 envMapSample = sampleEnvMap(reflectedDirection, metallicRoughnessDebug.y);
+  vec3 reflectedColor = mix(envMapSample, ssrSample.rgb, ssrSample.a); 
 
   vec3 irradianceColor = sampleIrrMap(normal);
 
@@ -173,7 +175,7 @@ void main() {
         normalize(direction),
         normal, 
         baseColor.rgb, 
-        reflectedColor.rgb, 
+        reflectedColor, 
         irradianceColor,
         metallicRoughnessDebug.x, 
         metallicRoughnessDebug.y, 
