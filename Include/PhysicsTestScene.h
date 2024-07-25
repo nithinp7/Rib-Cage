@@ -39,5 +39,17 @@ public:
 private:
   PhysicsSystem m_physicsSystem;
   IntrusivePtr<Floor> m_floor;
+
+  struct PhysicsCapture {
+    std::vector<RigidBodyState> rbStates;
+
+    void capture(const PhysicsSystem& system);
+    void restore(PhysicsSystem& system) const;
+  };
+  std::vector<PhysicsCapture> m_rewindBuffer;
+  uint32_t m_rewindBufferOffset = 0;
+  uint32_t m_rewindBufferCapacity = 32;
+
+  PhysicsCapture m_manualCapture;
 };
 } // namespace 

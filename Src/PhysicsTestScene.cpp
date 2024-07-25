@@ -29,12 +29,37 @@ void PhysicsTestScene::init(
   glm::vec3 a(0.0f);
   glm::vec3 b(5.0f);
   float radius = 2.0f;
+
+  m_rewindBuffer.resize(m_rewindBufferCapacity);
+}
+
+void PhysicsTestScene::PhysicsCapture::capture(const PhysicsSystem& system) {
+  rbStates.resize(system.getRigidBodyCount());
+  for (uint32_t i = 0; i < system.getRigidBodyCount(); ++i) {
+    rbStates[i] = system.getRigidBodyState(i);
+  }
+}
+
+void PhysicsTestScene::PhysicsCapture::restore(PhysicsSystem& system) const {
+  for (uint32_t i = 0; i < system.getRigidBodyCount() && i < rbStates.size(); ++i) {
+    const_cast<RigidBodyState&>(system.getRigidBodyState(i)) = rbStates[i];
+  }
+
+  system.forceUpdateCapsules();
 }
 
 void PhysicsTestScene::update(const FrameContext& frame) {
   float fixedDt = 1.0f / 60.0f;
-  if (!s_paused || s_stepFrameCounter > 0)
-    m_physicsSystem.tick(fixedDt);
+  int substeps = 1;
+  if (!s_paused || s_stepFrameCounter > 0) {
+    for (int i = 0; i < substeps; ++i) {
+      m_physicsSystem.tick(fixedDt / substeps);
+    }
+
+    m_rewindBufferOffset = (m_rewindBufferOffset + 1) % m_rewindBufferCapacity;
+    m_rewindBuffer[m_rewindBufferOffset].capture(m_physicsSystem);
+  }
+
   if (s_stepFrameCounter > 0)
     --s_stepFrameCounter;
 }
@@ -60,6 +85,20 @@ void PhysicsTestScene::updateUI() {
     ImGui::SameLine();
     if (ImGui::Button(">>>"))
       s_stepFrameCounter = 16;
+
+    // TODO: Fix-up debug line rendering, it doesn't work with rewinding
+   /* if (ImGui::Button("Rewind")) {
+      m_rewindBufferOffset = (m_rewindBufferOffset + m_rewindBufferCapacity - 1) % m_rewindBufferCapacity;
+      m_rewindBuffer[m_rewindBufferOffset].restore(m_physicsSystem);
+    }*/
+
+    if (ImGui::Button("Manual Capture")) {
+      m_manualCapture.capture(m_physicsSystem);
+    }
+
+    if (ImGui::Button("Restore Capture")) {
+      m_manualCapture.restore(m_physicsSystem);
+    }
 
     static bool s_settingsVisible = false;
     if (ImGui::CollapsingHeader("Physics World Settings", s_settingsVisible)) {
@@ -121,6 +160,22 @@ void PhysicsTestScene::updateUI() {
               20.0f)) {
         m_floor->m_floorHeight = m_physicsSystem.getSettings().floorHeight;
       }
+
+      ImGui::Separator();
+      ImGui::Text("Enable Velocity Update:");
+      ImGui::Checkbox("##enablevelupdate", &m_physicsSystem.getSettings().enableVelocityUpdate);
+      if (!m_physicsSystem.getSettings().enableVelocityUpdate) {
+        ImGui::Text("Override Angular Velocity:");
+        static glm::vec3 angVel(0.0f);
+        if (ImGui::DragFloat3(
+          "##angularvel",
+          &angVel[0])) {
+          for (uint32_t i = 0; i < m_physicsSystem.getRigidBodyCount(); ++i) {
+            const_cast<glm::vec3&>(m_physicsSystem.getRigidBodyState(i).angularVelocity) = angVel;
+            const_cast<glm::vec3&>(m_physicsSystem.getRigidBodyState(i).linearVelocity) = glm::vec3(0.0f);
+          }
+        }
+      }
     }
     ImGui::Separator();
 
@@ -159,21 +214,30 @@ void PhysicsTestScene::updateUI() {
           const_cast<RigidBodyState&>(m_physicsSystem.getRigidBodyState(i));
 
       ImGui::Separator();
-      ImGui::Text("Rigid Body %d:", i);
+      sprintf(buf, "Rigid Body %d", i);
+      if (ImGui::CollapsingHeader(buf)) {
+        ImGui::Indent();
 
-      ImGui::Indent();
+        ImGui::Text("Translation:");
+        sprintf(buf, "##rbtranslate_%d", i);
+        ImGui::DragFloat3(buf, &state.translation[0]);
+        ImGui::Text("Rotate:");
+        glm::vec3 angles = glm::degrees(glm::eulerAngles(state.rotation));
+        sprintf(buf, "##rbrotate_%d", i);
+        if (ImGui::DragFloat3(buf, &angles[0])) {
+          state.rotation = glm::quat(glm::radians(angles));
+        }
 
-      ImGui::Text("Translation:");
-      sprintf(buf, "##rbtranslate_%d", i);
-      ImGui::DragFloat3(buf, &state.translation[0]);
-      ImGui::Text("Rotate:");
-      glm::vec3 angles = glm::degrees(glm::eulerAngles(state.rotation));
-      sprintf(buf, "##rbrotate_%d", i);
-      if (ImGui::DragFloat3(buf, &angles[0])) {
-        state.rotation = glm::quat(glm::radians(angles));
+        // ImGui::Text("Linear Velocity");
+        // sprintf(buf, "##linvel_%d", i);
+        // ImGui::DragFloat3(buf, &state.linearVelocity[0]);
+
+        // ImGui::Text("Angular Velocity");
+        // sprintf(buf, "##angvel_%d", i);
+        // ImGui::DragFloat3(buf, &state.angularVelocity[0]);
+
+        ImGui::Unindent();
       }
-
-      ImGui::Unindent();
     }
 
     for (uint32_t i = m_physicsSystem.getCapsuleCount() - unboundCapsules;
