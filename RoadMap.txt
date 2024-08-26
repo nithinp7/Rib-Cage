@@ -4,6 +4,16 @@ This is going to remain a loose collection of experiments and features until a c
 shape
 
 Physics System:
+Rigid XPBD:
+- [x] Time substeps
+- [ ] Friction / restitution
+- [ ] Collision cache data structure 
+- [ ] Principled collision padding
+- [x] Separate collision detection outside of substep loop
+- [x] Dynamic collisions
+- [ ] Hinge constraints
+- [ ] Ragdoll 
+
 Ribid-body system design...
 - Capsule collider registration --> collider handle
   - Later use handle to update collider transform
