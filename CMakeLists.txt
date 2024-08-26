@@ -31,10 +31,11 @@ add_executable(RibCage ${SRC_FILES_LIST})
 target_compile_definitions(${PROJECT_NAME} PRIVATE MAX_UV_COORDS=4)
 
 add_subdirectory(Extern/Althea)
-# if (MSVC)
-#     target_compile_options(${targetName} PRIVATE /W4 /WX /wd4201 /bigobj)
-# else()
-#     target_compile_options(${targetName} PRIVATE -Werror -Wall -Wextra -Wconversion -Wpedantic -Wshadow -Wsign-conversion)
-# endif()
+if (MSVC)
+  add_compile_options(/MP)
+  target_link_options(RibCage PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
+  target_compile_options(RibCage PRIVATE $<$<CONFIG:Debug>:/ZI>)
+endif()
+
 target_link_libraries(${PROJECT_NAME} PUBLIC Althea)
 

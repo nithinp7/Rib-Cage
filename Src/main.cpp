@@ -6,7 +6,7 @@
 using namespace AltheaEngine;
 
 int main() {
-  Application app("Rib Cage", "../..", "../../Extern/Althea");
+  Application app("Rib Cage", "..", "../Extern/Althea");
   app.createGame<RibCage::RibCage>();
 
   try {
