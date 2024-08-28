@@ -31,6 +31,7 @@
 #include <Althea/GlobalUniforms.h>
 #include <Althea/GlobalResources.h>
 #include <Althea/OrbitCamera.h>
+#include <Althea/StencilQuery.h>
 #include <glm/glm.hpp>
 
 #include <vector>
@@ -43,6 +44,8 @@ class Application;
 } // namespace AltheaEngine
 
 namespace RibCage {
+
+extern StencilQueryManager* GStencilQueryManager;
 
 class RibCage : public IGameInstance {
 public:

@@ -31,6 +31,9 @@
 using namespace AltheaEngine;
 
 namespace RibCage {
+
+StencilQueryManager* GStencilQueryManager = nullptr;
+
 namespace {
 struct DeferredPassPushConstants {
   uint32_t globalResources;
@@ -47,7 +50,7 @@ void RibCage::initGame(Application& app) {
       app.getInputManager(),
       90.0f,
       (float)windowDims.width / (float)windowDims.height);
-  m_pCameraController->setMaxSpeed(15.0f);
+  m_pCameraController->setMaxSpeed(45.0f);
 
   m_orbitCamera = OrbitCamera(
       glm::vec3(0.0f),
@@ -68,6 +71,7 @@ void RibCage::initGame(Application& app) {
         that->m_skeletonEditor.tryRecompileShaders(app);
 
         that->m_gBufferPass.tryRecompileShaders(app);
+        that->m_SSR.tryRecompileShaders(app);
 
         for (auto& sceneElem : that->m_sceneElements)
           sceneElem->tryRecompileShaders(app);
@@ -117,6 +121,8 @@ void RibCage::destroyRenderState(Application& app) {
   m_debugScene = {};
 
   m_sceneElements.clear();
+
+  delete GStencilQueryManager;
 }
 
 static int s_cameraMode = 1;
@@ -257,11 +263,17 @@ void RibCage::_createGlobalResources(
   for (auto& sceneElem : m_sceneElements)
     sceneElem->init(app, commandBuffer, gBufferPassBuilder, m_globalHeap);
 
+  // TODO: remove this once SSR is fixed up...
+  gBufferPassBuilder.disableDepthDoubleBuffering();
+
   m_gBufferPass = SceneToGBufferPass(
       app,
       m_globalResources.getGBuffer(),
       m_globalHeap.getDescriptorSetLayout(),
       std::move(gBufferPassBuilder));
+
+  GStencilQueryManager =
+      new StencilQueryManager(app, m_globalHeap.getDescriptorSetLayout());
 }
 
 void RibCage::_createDeferredPass(Application& app) {
@@ -347,6 +359,11 @@ void RibCage::draw(
       m_globalUniforms.getCurrentBindlessHandle(frame));
 
   m_globalResources.getGBuffer().transitionToTextures(commandBuffer);
+
+  GStencilQueryManager->update(
+      m_globalHeap,
+      commandBuffer,
+      {m_globalResources.getGBuffer().getHandles().stencilAHandle});
 
   // Reflection buffer and convolution
   {

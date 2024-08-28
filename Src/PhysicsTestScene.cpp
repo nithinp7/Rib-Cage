@@ -4,6 +4,7 @@
 #include <Althea/InputManager.h>
 #include <Althea/InputMask.h>
 #include <Althea/Utilities.h>
+#include <Althea/StencilQuery.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 using namespace AltheaEngine;
@@ -112,12 +113,28 @@ void PhysicsTestScene::update(const FrameContext& frame) {
     --s_stepFrameCounter;
 }
 
+extern Application* GApplication;
+extern StencilQueryManager* GStencilQueryManager;
+
 void PhysicsTestScene::updateUI() {
+  
   static uint32_t unboundCapsules = 0;
   char buf[128];
 
   if (ImGui::CollapsingHeader("Test Physics System")) {
     ImGui::Indent();
+
+    const VkExtent2D& extent = GApplication->getSwapChainExtent();
+    InputManager::MousePos mpos = GInputManager->getCurrentMousePos();
+    glm::vec2 mouseUV(static_cast<float>(mpos.x) / extent.width, static_cast<float>(mpos.y) / extent.height);
+    
+    static StencilQueryHandle query = GStencilQueryManager->createStencilQuery(mouseUV);
+
+    static uint32_t queryResult = 0;
+    if (GStencilQueryManager->getQueryResults(query, queryResult)) {
+      query = GStencilQueryManager->createStencilQuery(mouseUV);
+    }
+    ImGui::Text("Stencil Query Result %u", queryResult);
 
     static char s_filename[256] = "Data/PhysicsUnitTests/Test.simsave";
     if (ImGui::Button("Save Simulation")) {
@@ -130,6 +147,7 @@ void PhysicsTestScene::updateUI() {
       std::string filename =
         GProjectDirectory + "/" + std::string(s_filename);
       m_physicsSystem.debugLoadFromFile(filename.c_str());
+      m_manualCapture.capture(m_physicsSystem);
     }
 
     ImGui::InputText("##simulationfilename", s_filename, 256);

@@ -3,18 +3,26 @@
 
 #include <iostream>
 
+namespace RibCage {
+  Application* GApplication;
+} // namespace RibCage
+
+using namespace RibCage;
 using namespace AltheaEngine;
 
 int main() {
-  Application app("Rib Cage", "..", "../Extern/Althea");
-  app.createGame<RibCage::RibCage>();
+  GApplication = new Application("Rib Cage", "..", "../Extern/Althea");
+  GApplication->createGame<::RibCage::RibCage>();
 
   try {
-    app.run();
+    GApplication->run();
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
+    delete GApplication;
     return EXIT_FAILURE;
   }
+
+  delete GApplication;
 
   return EXIT_SUCCESS;
 }
